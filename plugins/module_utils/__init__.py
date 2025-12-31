@@ -18,4 +18,10 @@ on remote hosts across different platforms (POSIX, Windows).
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from ansible_collections.o0_o.core.plugins.module_utils.core_action_base import (  # noqa: E501
+    CoreActionBase,
+)
+
+__all__ = [
+    "CoreActionBase",
+]
