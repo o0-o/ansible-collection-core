@@ -49,10 +49,10 @@ from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import
 )
 
 from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
-    COMMAND_SPEC as CORE_COMMAND_SPEC,
+    COMMAND_SPEC,
 )
-from ansible_collections.o0_o.core.plugins.module_utils.connection_types import (  # noqa: E501
-    CONNECTION_TYPES,
+from ansible_collections.o0_o.core.plugins.module_utils.connection import (
+    CONNECTION_BY_PLATFORM,
 )
 
 
@@ -98,7 +98,7 @@ class CoreActionBase:
     """
 
     # Command specifications - subclasses extend via dict merge
-    COMMAND_SPEC: Dict[str, Dict[str, Any]] = CORE_COMMAND_SPEC
+    COMMAND_SPEC: Dict[str, Dict[str, Any]] = COMMAND_SPEC
 
     @contextmanager
     @typechecked
@@ -165,13 +165,13 @@ class CoreActionBase:
         :raises ValueError: If connection type is not recognized
         """
         connection_type = self._get_connection_type()
-        for platform, connections in CONNECTION_TYPES.items():
+        for platform, connections in CONNECTION_BY_PLATFORM.items():
             if connection_type in connections:
                 return platform
         # Build error message with all known platforms
         known = ", ".join(
             f"{p} ({', '.join(sorted(c))})"
-            for p, c in CONNECTION_TYPES.items()
+            for p, c in CONNECTION_BY_PLATFORM.items()
         )
         raise ValueError(
             f"Connection '{connection_type}' is not recognized. "

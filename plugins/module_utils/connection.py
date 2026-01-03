@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Dict, FrozenSet
 
 
-CONNECTION_TYPES: Dict[str, FrozenSet[str]] = {
+CONNECTION_BY_PLATFORM: Dict[str, FrozenSet[str]] = {
     "posix": frozenset(
         {
             # Core Ansible connections

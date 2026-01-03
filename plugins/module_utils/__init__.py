@@ -24,19 +24,19 @@ from __future__ import annotations
 from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
     COMMAND_SPEC,
 )
-from ansible_collections.o0_o.core.plugins.module_utils.connection_types import (  # noqa: E501
-    CONNECTION_TYPES,
+from ansible_collections.o0_o.core.plugins.module_utils.connection import (
+    CONNECTION_BY_PLATFORM,
 )
 from ansible_collections.o0_o.core.plugins.module_utils.core_action_base import (  # noqa: E501
     CoreActionBase,
 )
-from ansible_collections.o0_o.core.plugins.module_utils.parsers import (
-    validate_hello_world,
+from ansible_collections.o0_o.core.plugins.module_utils.localhost import (
+    LOCALHOST_NAMES,
 )
 
 __all__ = [
     "COMMAND_SPEC",
-    "CONNECTION_TYPES",
+    "CONNECTION_BY_PLATFORM",
     "CoreActionBase",
-    "validate_hello_world",
+    "LOCALHOST_NAMES",
 ]
