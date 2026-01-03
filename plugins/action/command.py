@@ -30,9 +30,17 @@ from ansible.plugins.action import ActionBase
 from ansible_collections.o0_o.windows.plugins.module_utils import (
     WindowsActionBase,
 )
-from ansible_collections.o0_o.posix.plugins.module_utils import (
-    PosixActionBase,
-)
+
+# TODO: Remove fallback once o0_o.posix v2 is published
+# v2 uses module_utils.PosixActionBase, v1.x uses action_utils.PosixBase
+try:
+    from ansible_collections.o0_o.posix.plugins.module_utils import (
+        PosixActionBase,
+    )
+except ImportError:
+    from ansible_collections.o0_o.posix.plugins.action_utils import (
+        PosixBase as PosixActionBase,
+    )
 
 
 class ActionModule(PosixActionBase, WindowsActionBase, ActionBase):

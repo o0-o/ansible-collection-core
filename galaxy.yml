@@ -18,7 +18,7 @@ tags:
   - execution
   - cross-platform
 dependencies:
-  o0_o.posix: '>=1.0.0'
+  o0_o.posix: '>=1.4.3'
   o0_o.utils: '>=2.0.0'
   o0_o.windows: '>=0.1.0'
   ansible.windows: '>=2.0.0'

@@ -16,8 +16,6 @@ from __future__ import annotations
 import pytest
 from typeguard import TypeCheckError
 
-from ansible_collections.o0_o.core.tests.utils import boom
-
 
 class TestGetCommandErrorPrefix:
     """Tests for _get_command_error_prefix method."""
@@ -55,7 +53,7 @@ class TestGetCommandErrorPrefix:
             base._get_command_error_prefix("not a dict")
 
     def test_empty_implementation(self, base) -> None:
-        """Test ValueError raised when implementation is empty string."""
+        """Test ValueError when implementation is empty string."""
         cmd_obj = {"implementation": "", "type": "whoami"}
         with pytest.raises(ValueError, match="missing implementation"):
             base._get_command_error_prefix(cmd_obj)

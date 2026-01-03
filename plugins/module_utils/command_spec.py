@@ -15,14 +15,12 @@ This module defines command templates organized by implementation type.
 Each specification includes a template, optional parser, and optional
 validator. If no parser is specified, stdout is returned as-is.
 
-Subclasses in other collections can extend COMMAND_SPEC by merging:
+Subclasses in other collections can extend COMMAND_SPEC by merging::
 
-    from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
-        COMMAND_SPEC as CORE_COMMAND_SPEC,
-    )
-    from ansible_collections.o0_o.posix.plugins.module_utils.parsers import (
-        parse_stat,
-    )
+    from ansible_collections.o0_o.core.plugins.module_utils. \\
+        command_spec import COMMAND_SPEC as CORE_COMMAND_SPEC
+    from ansible_collections.o0_o.posix.plugins.module_utils. \\
+        parsers import parse_stat
 
     COMMAND_SPEC = {
         **CORE_COMMAND_SPEC,

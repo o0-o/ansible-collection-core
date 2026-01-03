@@ -228,8 +228,9 @@ class CoreActionBase:
     ) -> list[Dict[str, Any]]:
         """Process command spec and return list of command requests.
 
-        Looks up cmd_type in self.COMMAND_SPEC across all implementations
-        and builds command request dicts with formatted templates.
+        Looks up cmd_type in self.COMMAND_SPEC across all
+        implementations and builds command request dicts with
+        formatted templates.
 
         :param str cmd_type: Command type to look up
         :param **cmd_kwargs: Format arguments for command template
@@ -346,16 +347,18 @@ class CoreActionBase:
     ) -> Tuple[Optional[str], Optional[list]]:
         """Process command result: validate, parse, and validate output.
 
-        Extracts stdout from the command result, optionally runs a parser,
-        and optionally runs a validator. Returns parsed output or errors.
+        Extracts stdout from the command result, optionally runs a
+        parser, and optionally runs a validator. Returns parsed output
+        or errors.
 
-        :param Dict[str, Any] cmd_completed: Completed command dict with
-            'result' key containing rc, stdout, stderr, plus optional
-            'parser' and 'validator' callables
-        :param Optional[list[int]] non_error_codes: Return codes considered
-            non-error. Defaults to [0]
-        :returns Tuple[Optional[str], Optional[list]]: (parsed_output, None)
-            on success, or (None, [errors]) on failure
+        :param Dict[str, Any] cmd_completed: Completed command dict
+            with 'result' key containing rc, stdout, stderr, plus
+            optional 'parser' and 'validator' callables
+        :param Optional[list[int]] non_error_codes: Return codes
+            considered non-error. Defaults to [0]
+        :returns Tuple[Optional[str], Optional[list]]:
+            (parsed_output, None) on success, or (None, [errors]) on
+            failure
         :raises TypeError: If cmd_completed or result is not a dict
         :raises ValueError: If required fields are missing or malformed
         """
