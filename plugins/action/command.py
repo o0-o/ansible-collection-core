@@ -104,12 +104,26 @@ class ActionModule(CoreActionBase, ActionBase):
 
         self._display.vvv(f"Delegating to {target_module}")
 
-        # Delegate to the appropriate command module
-        delegated_result = self._run_action(
-            plugin_name=target_module,
-            plugin_args=plugin_args,
-            task_vars=task_vars,
-        )
+        # Delegate to the appropriate command module.
+        # Wrap in try/except to handle missing collection gracefully.
+        try:
+            delegated_result = self._run_action(
+                plugin_name=target_module,
+                plugin_args=plugin_args,
+                task_vars=task_vars,
+            )
+        except Exception as e:
+            # Extract collection name from module FQCN
+            collection = ".".join(target_module.rsplit(".", 1)[:-1])
+            result["failed"] = True
+            result["msg"] = (
+                f"Failed to delegate to {target_module}: {e}. "
+                f"Ensure '{collection}' is installed: "
+                f"ansible-galaxy collection install {collection}. "
+                "Note: Galaxy dependency limitations prevent declaring "
+                "bidirectional dependencies between collections."
+            )
+            return result
 
         result.update(delegated_result)
         result["invocation"] = self._task.args.copy()

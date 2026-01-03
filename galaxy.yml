@@ -18,7 +18,7 @@ tags:
   - execution
   - cross-platform
 dependencies:
-  o0_o.utils: '>=2.0.0'
+  o0_o.utils: '>=3.0.0'
 repository: https://github.com/o0-o/ansible-collection-core
 issues: https://github.com/o0-o/ansible-collection-core/issues
 build_ignore:

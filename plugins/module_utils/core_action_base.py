@@ -51,50 +51,8 @@ from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import
 from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
     COMMAND_SPEC as CORE_COMMAND_SPEC,
 )
-
-
-# Connection types mapped to platform categories
-POSIX_CONNECTIONS = frozenset(
-    {
-        # Core Ansible connections
-        "local",
-        "ssh",
-        "ansible.builtin.local",
-        "ansible.builtin.ssh",
-        # Container runtimes
-        "docker",
-        "podman",
-        "buildah",
-        "community.docker.docker",
-        "community.docker.docker_api",
-        "containers.podman.podman",
-        "containers.podman.buildah",
-        # Orchestration (Kubernetes/OpenShift)
-        "kubectl",
-        "oc",
-        "kubernetes.core.kubectl",
-        "community.okd.oc",
-        # Jails/Zones (BSD/Solaris)
-        "jail",
-        "zone",
-        "community.general.jail",
-        "community.general.zone",
-        # Other POSIX-compatible
-        "lxc",
-        "lxd",
-        "chroot",
-        "community.general.lxc",
-        "community.general.lxd",
-        "community.general.chroot",
-    }
-)
-WINDOWS_CONNECTIONS = frozenset(
-    {
-        "winrm",
-        "psrp",
-        "ansible.builtin.winrm",
-        "ansible.builtin.psrp",
-    }
+from ansible_collections.o0_o.core.plugins.module_utils.connection_types import (  # noqa: E501
+    CONNECTION_TYPES,
 )
 
 
@@ -207,14 +165,17 @@ class CoreActionBase:
         :raises ValueError: If connection type is not recognized
         """
         connection_type = self._get_connection_type()
-        if connection_type in POSIX_CONNECTIONS:
-            return "posix"
-        if connection_type in WINDOWS_CONNECTIONS:
-            return "windows"
+        for platform, connections in CONNECTION_TYPES.items():
+            if connection_type in connections:
+                return platform
+        # Build error message with all known platforms
+        known = ", ".join(
+            f"{p} ({', '.join(sorted(c))})"
+            for p, c in CONNECTION_TYPES.items()
+        )
         raise ValueError(
-            f"Connection '{connection_type}' is not recognized as POSIX "
-            f"({', '.join(sorted(POSIX_CONNECTIONS))}) or Windows "
-            f"({', '.join(sorted(WINDOWS_CONNECTIONS))})"
+            f"Connection '{connection_type}' is not recognized. "
+            f"Known platforms: {known}"
         )
 
     @typechecked

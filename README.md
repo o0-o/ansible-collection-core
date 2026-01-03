@@ -20,13 +20,9 @@ https://o0-o.github.io/ansible-collection-core/
 ansible-galaxy collection install o0_o.core
 ```
 
-> **Note:** This collection provides the core base classes used by
-> `o0_o.posix` and `o0_o.windows`. Install platform-specific collections
-> as needed for your target systems.
-
 ## Dependencies
 
-- `o0_o.utils` >= 2.0.0
+- `o0_o.utils` >= 3.0.0
 
 ## Contributing
 
