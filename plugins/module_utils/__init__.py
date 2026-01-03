@@ -14,14 +14,25 @@
 This module provides cross-platform command execution primitives
 including base classes for action plugins that need to run commands
 on remote hosts across different platforms (POSIX, Windows).
+
+Command specifications are defined as class attributes on CoreActionBase
+and can be extended by subclasses via dict merge.
 """
 
 from __future__ import annotations
 
+from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
+    COMMAND_SPEC,
+)
 from ansible_collections.o0_o.core.plugins.module_utils.core_action_base import (  # noqa: E501
     CoreActionBase,
 )
+from ansible_collections.o0_o.core.plugins.module_utils.parsers import (
+    validate_hello_world,
+)
 
 __all__ = [
+    "COMMAND_SPEC",
     "CoreActionBase",
+    "validate_hello_world",
 ]

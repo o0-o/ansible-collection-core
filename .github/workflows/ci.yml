@@ -1,0 +1,613 @@
+# vim: ts=2:sw=2:sts=2:et:ft=yaml
+# -*- mode: yaml; yaml-indent-offset: 2; indent-tabs-mode: nil; -*-
+---
+name: Ansible Collection CI
+
+'on':
+  push:
+    branches: [main]
+    tags:
+      - "v*.*.*"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Collection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible Core
+        run: pip install ansible-core
+
+      - name: Install linters
+        run: |
+          pip install yamllint black flake8
+
+      - name: Run black
+        run: black --check --diff --color .
+
+      - name: Run flake8
+        run: flake8 --count --show-source --statistics .
+
+      - name: Run yamllint
+        run: yamllint -f parsable .
+
+      - name: Build Collection
+        run: ansible-galaxy collection build
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./*.tar.gz
+
+  # Quick smoke test on ubuntu-latest before running full matrix
+  quick-test:
+    name: Quick Test (Ubuntu Latest)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Install Ansible and collection
+        run: |
+          pip install ansible-core
+          ansible-galaxy collection install ./build/o0_o-core-*.tar.gz \
+            --force -p ~/.ansible/collections
+
+      - name: Run quick sanity tests
+        run: |
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+          ansible-test sanity --venv -v
+
+      - name: Run quick unit tests
+        run: |
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+          ansible-test units --venv -v
+
+      - name: Run quick integration tests
+        run: |
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+          ansible-test integration --venv -v
+
+  # Read the Linux OS and Python version matrices from JSON files
+  linux-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      test-matrix: ${{ steps['set-matrix']['outputs']['test-matrix'] }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: |
+          echo "test-matrix=$(
+              python3 .github/scripts/generate-linux-test-matrix.py
+            )" >> $GITHUB_OUTPUT
+
+  macos-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      test-matrix: ${{ steps['set-matrix']['outputs']['test-matrix'] }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: |
+          echo "test-matrix=$(
+              python3 .github/scripts/generate-macos-test-matrix.py
+            )" >> $GITHUB_OUTPUT
+
+  windows-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      test-matrix: ${{ steps['set-matrix']['outputs']['test-matrix'] }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: |
+          echo "test-matrix=$(
+              python3 .github/scripts/generate-windows-test-matrix.py
+            )" >> $GITHUB_OUTPUT
+
+  linux-sanity:
+    name: >
+      Sanity (${{ matrix['os'] }} - Py${{ matrix['python'] }}/
+      Ansible${{ matrix['ansible_version'] }})
+    runs-on: ubuntu-latest
+    needs:
+      - linux-matrix
+      - quick-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJson(needs['linux-matrix']['outputs']['test-matrix']) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Run sanity tests in container
+        run: |
+          # Note: --security-opt seccomp=unconfined is required for shellcheck
+          # in ansible-test sanity to access get_mempolicy syscall
+          docker run --rm \
+            --security-opt seccomp=unconfined \
+            -v "${{ github['workspace'] }}/build:/build" \
+            -v "${{ github['workspace'] }}/.github:/workspace/.github:ro" \
+            -w /root \
+            ${{ matrix['os'] }} sh -c '
+              set -eux
+              export LINUX_OS="${{ matrix['os'] }}"
+              export PYTHON_VERSION="${{ matrix['python'] }}"
+              . /workspace/.github/scripts/setup-linux-pyenv.sh
+
+              # Source the venv that was created
+              . .venv/bin/activate
+
+              # Install specific Ansible version
+              pip install --upgrade "${{ matrix['ansible_package'] }}"
+
+              # Show which Ansible version we got
+              ansible --version
+
+              # Install collection from built tarball with dependencies
+              ansible-galaxy collection install /build/o0_o-core-*.tar.gz \
+                --force -p /root/.ansible/collections -vvv
+
+              # Navigate to installed collection
+              cd /root/.ansible/collections/ansible_collections/o0_o/core
+
+              # Run sanity tests for this specific Python version
+              ansible-test sanity --venv --python ${{ matrix['python'] }} -v
+            '
+
+  linux-units:
+    name: >
+      Units (${{ matrix['os'] }} - Py${{ matrix['python'] }}/
+      Ansible${{ matrix['ansible_version'] }})
+    runs-on: ubuntu-latest
+    needs:
+      - linux-matrix
+      - quick-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJson(needs['linux-matrix']['outputs']['test-matrix']) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Run unit tests in container
+        run: |
+          docker run --rm \
+            --security-opt seccomp=unconfined \
+            -v "${{ github['workspace'] }}/build:/build" \
+            -v "${{ github['workspace'] }}/.github:/workspace/.github:ro" \
+            -w /root \
+            -e ANSIBLE_PACKAGE="${{ matrix['ansible_package'] }}" \
+            ${{ matrix['os'] }} sh -c '
+              set -eux
+              export LINUX_OS="${{ matrix['os'] }}"
+              export PYTHON_VERSION="${{ matrix['python'] }}"
+              export TEST_TYPE="units"
+              . /workspace/.github/scripts/setup-linux-pyenv.sh
+
+              # Run unit tests as both root and non-root users
+              . /workspace/.github/scripts/run-tests-multi-user.sh
+            '
+
+  linux-integration:
+    name: >
+      Integration (${{ matrix['os'] }} -
+      Py${{ matrix['python'] }}/Ansible${{ matrix['ansible_version'] }})
+    runs-on: ubuntu-latest
+    needs:
+      - linux-matrix
+      - quick-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJson(needs['linux-matrix']['outputs']['test-matrix']) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Run integration tests in container
+        run: |
+          docker run --rm \
+            --security-opt seccomp=unconfined \
+            -v "${{ github['workspace'] }}/build:/build" \
+            -v "${{ github['workspace'] }}/.github:/workspace/.github:ro" \
+            -w /root \
+            -e ANSIBLE_PACKAGE="${{ matrix['ansible_package'] }}" \
+            ${{ matrix['os'] }} sh -c '
+              set -eux
+              export LINUX_OS="${{ matrix['os'] }}"
+              export PYTHON_VERSION="${{ matrix['python'] }}"
+              export TEST_TYPE="integration"
+              # Run all integration tests (no specific target)
+              . /workspace/.github/scripts/setup-linux-pyenv.sh
+
+              # Run all integration test targets as both root and
+              # non-root users
+              . /workspace/.github/scripts/run-tests-multi-user.sh
+            '
+
+
+  macos-sanity:
+    name: >
+      Sanity (${{ matrix['os'] }} - Py${{ matrix['python'] }}/
+      Ansible${{ matrix['ansible_version'] }})
+    runs-on: ${{ matrix['os'] }}
+    needs:
+      - macos-matrix
+      - quick-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJson(needs['macos-matrix']['outputs']['test-matrix']) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix['python'] }}
+
+      - name: Run sanity tests
+        run: |
+          set -eux
+
+          # Use specific Python version for ansible-core installation
+          python${{ matrix['python'] }} -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          pip install --upgrade "${{ matrix['ansible_package'] }}"
+
+          # Show which Ansible version we got
+          ansible --version
+
+          # Install collection from built tarball with dependencies
+          ansible-galaxy collection install ./build/o0_o-core-*.tar.gz \
+            --force -p ~/.ansible/collections -vvv
+
+          # Navigate to installed collection
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+
+          # Run sanity tests for this specific Python version
+          ansible-test sanity --venv --python ${{ matrix['python'] }} -v
+
+  macos-units:
+    name: >
+      Units (${{ matrix['os'] }} - Py${{ matrix['python'] }}/
+      Ansible${{ matrix['ansible_version'] }})
+    runs-on: ${{ matrix['os'] }}
+    needs:
+      - macos-matrix
+      - quick-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJson(needs['macos-matrix']['outputs']['test-matrix']) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix['python'] }}
+
+      - name: Run unit tests
+        run: |
+          set -eux
+
+          # Use specific Python version for ansible-core installation
+          python${{ matrix['python'] }} -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          pip install --upgrade "${{ matrix['ansible_package'] }}"
+
+          # Show which Ansible version we got
+          ansible --version
+
+          # Install collection from built tarball with dependencies
+          ansible-galaxy collection install ./build/o0_o-core-*.tar.gz \
+            --force -p ~/.ansible/collections -vvv
+
+          # Navigate to installed collection
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+
+          # Run unit tests for this specific Python version
+          ansible-test units --venv --python ${{ matrix['python'] }} -v
+
+  macos-integration:
+    name: >
+      Integration (${{ matrix['os'] }} -
+      Py${{ matrix['python'] }}/Ansible${{ matrix['ansible_version'] }})
+    runs-on: ${{ matrix['os'] }}
+    needs:
+      - macos-matrix
+      - quick-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJson(needs['macos-matrix']['outputs']['test-matrix']) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix['python'] }}
+
+      - name: Run integration tests
+        run: |
+          set -eux
+
+          # Use specific Python version for ansible-core installation
+          python${{ matrix['python'] }} -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          pip install --upgrade "${{ matrix['ansible_package'] }}"
+
+          # Show which Ansible version we got
+          ansible --version
+
+          # Install collection from built tarball with dependencies
+          ansible-galaxy collection install ./build/o0_o-core-*.tar.gz \
+            --force -p ~/.ansible/collections -vvv
+
+          # Navigate to installed collection
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+
+          # Run all integration test targets
+          ansible-test integration --venv --python ${{ matrix['python'] }} -v
+
+  windows-sanity:
+    name: >
+      Sanity (${{ matrix['os'] }} - Py${{ matrix['python'] }}/
+      Ansible${{ matrix['ansible_version'] }})
+    runs-on: ${{ matrix['os'] }}
+    needs:
+      - windows-matrix
+      - quick-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJson(needs['windows-matrix']['outputs']['test-matrix']) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix['python'] }}
+
+      - name: Run sanity tests
+        shell: bash
+        run: |
+          set -eux
+
+          # Create and activate venv
+          python -m venv .venv
+          source .venv/Scripts/activate
+          pip install --upgrade pip
+          pip install --upgrade "${{ matrix['ansible_package'] }}"
+
+          # Show which Ansible version we got
+          ansible --version
+
+          # Install collection from built tarball with dependencies
+          ansible-galaxy collection install ./build/o0_o-core-*.tar.gz \
+            --force -p ~/.ansible/collections -vvv
+
+          # Navigate to installed collection
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+
+          # Run sanity tests for this specific Python version
+          ansible-test sanity --venv --python ${{ matrix['python'] }} -v
+
+  windows-units:
+    name: >
+      Units (${{ matrix['os'] }} - Py${{ matrix['python'] }}/
+      Ansible${{ matrix['ansible_version'] }})
+    runs-on: ${{ matrix['os'] }}
+    needs:
+      - windows-matrix
+      - quick-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJson(needs['windows-matrix']['outputs']['test-matrix']) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix['python'] }}
+
+      - name: Run unit tests
+        shell: bash
+        run: |
+          set -eux
+
+          # Create and activate venv
+          python -m venv .venv
+          source .venv/Scripts/activate
+          pip install --upgrade pip
+          pip install --upgrade "${{ matrix['ansible_package'] }}"
+
+          # Show which Ansible version we got
+          ansible --version
+
+          # Install collection from built tarball with dependencies
+          ansible-galaxy collection install ./build/o0_o-core-*.tar.gz \
+            --force -p ~/.ansible/collections -vvv
+
+          # Navigate to installed collection
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+
+          # Run unit tests for this specific Python version
+          ansible-test units --venv --python ${{ matrix['python'] }} -v
+
+  windows-integration:
+    name: >
+      Integration (${{ matrix['os'] }} -
+      Py${{ matrix['python'] }}/Ansible${{ matrix['ansible_version'] }})
+    runs-on: ${{ matrix['os'] }}
+    needs:
+      - windows-matrix
+      - quick-test
+    strategy:
+      fail-fast: false
+      matrix:
+        include: >-
+          ${{ fromJson(needs['windows-matrix']['outputs']['test-matrix']) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+          path: ./build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix['python'] }}
+
+      - name: Run integration tests
+        shell: bash
+        run: |
+          set -eux
+
+          # Create and activate venv
+          python -m venv .venv
+          source .venv/Scripts/activate
+          pip install --upgrade pip
+          pip install --upgrade "${{ matrix['ansible_package'] }}"
+
+          # Show which Ansible version we got
+          ansible --version
+
+          # Install collection from built tarball with dependencies
+          ansible-galaxy collection install ./build/o0_o-core-*.tar.gz \
+            --force -p ~/.ansible/collections -vvv
+
+          # Navigate to installed collection
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+
+          # Run integration tests for this specific Python version
+          ansible-test integration --venv --python ${{ matrix['python'] }} -v
+
+  sanity-complete:
+    name: All Sanity Tests Complete
+    runs-on: ubuntu-latest
+    needs:
+      - linux-sanity
+      - macos-sanity
+      - windows-sanity
+    steps:
+      - name: Sanity tests completed
+        run: echo "All sanity tests have completed successfully"
+
+  units-complete:
+    name: All Unit Tests Complete
+    runs-on: ubuntu-latest
+    needs:
+      - linux-units
+      - macos-units
+      - windows-units
+    steps:
+      - name: Unit tests completed
+        run: echo "All unit tests have completed successfully"
+
+  integration-complete:
+    name: All Integration Tests Complete
+    runs-on: ubuntu-latest
+    needs:
+      - linux-integration
+      - macos-integration
+      - windows-integration
+    steps:
+      - name: Integration tests completed
+        run: echo "All integration tests have completed successfully"
+
+  publish:
+    name: Publish to Ansible Galaxy
+    runs-on: ubuntu-latest
+    needs:
+      - sanity-complete
+      - units-complete
+      - integration-complete
+    if: startsWith(github['ref'], 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection-tarball
+      - name: Install Ansible Core
+        run: pip install ansible-core
+      - name: Publish to Galaxy
+        run: >
+          ansible-galaxy collection publish ./*.tar.gz
+          --token ${{ secrets['GALAXY_API_KEY'] }}

@@ -10,22 +10,46 @@
 # This file is part of the o0_o.core Ansible Collection.
 
 """
-Base class for Ansible action plugins with cross-platform execution support.
+Base class for Ansible action plugins with cross-platform support.
 
 This module provides a mixin class with utilities for action plugins,
-including text normalization, inventory hostname detection, command
-timing display, inter-plugin delegation, and template-based command
-execution with result parsing.
+including inventory hostname detection, command timing display,
+inter-plugin delegation, cross-platform command execution, and
+command specification processing.
+
+Command Specification Structure:
+    {
+        "implementation": {
+            "cmd_type": {
+                "template": ("command", "arg1", "{placeholder}"),
+                "parser": optional_parser_function,
+                "validator": optional_validator_function,
+            },
+        },
+    }
+
+Parser functions receive (rc, output, e_prefix) and return:
+    (parsed_output, error_list_or_none)
+
+Validator functions receive (parsed_output, e_prefix) and return:
+    Optional[Exception] - None if valid, exception if invalid
+
+If no parser is specified, stdout is returned as-is.
 """
 
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable, Iterable
 from contextlib import contextmanager
-from typing import Any, Dict, Generator, Optional
+from typing import Any, Dict, Generator, Optional, Tuple, Union
 
 from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import (  # noqa: E501
     typechecked,
+)
+
+from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
+    COMMAND_SPEC as CORE_COMMAND_SPEC,
 )
 
 
@@ -36,12 +60,24 @@ class CoreActionBase:
     This mixin provides cross-cutting helpers that are useful across
     different types of action plugins, regardless of the target system.
 
-    Utilities include:
-    - Text normalization (newline handling)
+    Provides:
+    - Connection type detection for platform-specific routing
     - Inventory hostname detection for logging
     - Command timing display for debugging
     - Inter-plugin delegation using FQCNs
-    - Template-based command generation and result parsing
+    - Cross-platform command execution via _command()
+    - Command specification processing via _process_command_spec()
+    - Binary-safe command execution context manager
+
+    Command specifications are defined in COMMAND_SPEC class attribute.
+    Subclasses can extend by merging their specs:
+
+        class PosixActionBase(CoreActionBase):
+            COMMAND_SPEC = {
+                **CoreActionBase.COMMAND_SPEC,
+                "gnu": {"stat": {...}},
+                "bsd": {"stat": {...}},
+            }
 
     Note: @typechecked is applied to methods rather than the class to
     avoid metaclass conflicts when subclasses also inherit from Ansible
@@ -57,6 +93,9 @@ class CoreActionBase:
             def run(self, tmp=None, task_vars=None):
                 ...
     """
+
+    # Command specifications - subclasses extend via dict merge
+    COMMAND_SPEC: Dict[str, Dict[str, Any]] = CORE_COMMAND_SPEC
 
     @contextmanager
     @typechecked
@@ -105,18 +144,12 @@ class CoreActionBase:
             constants.MODULE_STRICT_UTF8_RESPONSE = original
 
     @typechecked
-    def _normalize_newlines(self, text: str) -> str:
-        """
-        Normalize Windows-style line endings to Unix-style.
+    def _get_connection_type(self) -> str:
+        """Get the connection plugin type name.
 
-        Converts CRLF (\\r\\n) to LF (\\n) for consistent parsing
-        across platforms. This matches the behavior of the builtin
-        command module.
-
-        :param str text: Text with potential CRLF line endings
-        :returns str: Text with normalized LF line endings
+        :returns str: Connection type (e.g., 'ssh', 'winrm', 'local')
         """
-        return text.replace("\r\n", "\n")
+        return getattr(self._play_context, "connection", "ssh")
 
     @typechecked
     def _def_inventory_hostname(
@@ -188,6 +221,211 @@ class CoreActionBase:
             )
 
     @typechecked
+    def _process_command_spec(
+        self,
+        cmd_type: str,
+        **cmd_kwargs: str,
+    ) -> list[Dict[str, Any]]:
+        """Process command spec and return list of command requests.
+
+        Looks up cmd_type in self.COMMAND_SPEC across all implementations
+        and builds command request dicts with formatted templates.
+
+        :param str cmd_type: Command type to look up
+        :param **cmd_kwargs: Format arguments for command template
+        :returns list[Dict[str, Any]]: List of command request dicts
+        :raises TypeError: If spec structure is malformed
+        :raises ValueError: If template is missing or empty
+        """
+        results: list[Dict[str, Any]] = []
+        spec = self.COMMAND_SPEC
+
+        if not isinstance(spec, dict):
+            raise TypeError("COMMAND_SPEC is not a dict")
+
+        for implementation_name, implementation in spec.items():
+            if not isinstance(implementation, dict):
+                raise TypeError(
+                    f"The {implementation_name} implementation in "
+                    "COMMAND_SPEC is not a dict"
+                )
+            variant = implementation.get(cmd_type)
+            if variant is not None:
+                if not isinstance(variant, dict):
+                    raise TypeError(
+                        f"[{implementation_name}] Command type {cmd_type} is "
+                        "not a dict"
+                    )
+                cmd_request = variant.copy()
+                cmd_request["implementation"] = implementation_name
+                cmd_request["type"] = cmd_type
+                e_prefix = self._get_command_error_prefix(cmd_request)
+                template = cmd_request.pop("template", None)
+                if template is None:
+                    raise ValueError(
+                        f"{e_prefix}Command specification is missing a "
+                        "template"
+                    )
+                if isinstance(template, str):
+                    cmd_str = template.format(**cmd_kwargs).strip()
+                    if not cmd_str:
+                        raise ValueError(f"{e_prefix}Command is empty")
+                    cmd_request["command"] = cmd_str
+                    cmd_default_name = cmd_str.split()[0]
+                elif isinstance(template, Iterable):
+                    cmd_tuple = tuple(
+                        arg.format(**cmd_kwargs)
+                        if isinstance(arg, str)
+                        else arg
+                        for arg in template
+                    )
+                    if not cmd_tuple:
+                        raise ValueError(f"{e_prefix}Command is empty")
+                    if not isinstance(cmd_tuple[0], str):
+                        raise TypeError(
+                            f"{e_prefix}Command (without args) is not a "
+                            "string"
+                        )
+                    if cmd_tuple[0] == "":
+                        raise ValueError(
+                            f"{e_prefix}Command (without args) is empty"
+                        )
+                    cmd_request["command"] = cmd_tuple
+                    cmd_default_name = cmd_tuple[0].strip()
+                else:
+                    raise TypeError(
+                        f"{e_prefix}Template is not a string or iterable"
+                    )
+                cmd_request["name"] = (
+                    cmd_request.get("name") or cmd_default_name
+                )
+                results.append(cmd_request)
+                if implementation_name == "gnu":
+                    # gnu commands may be prefixed with 'g'
+                    alt_gnu_request = cmd_request.copy()
+                    cmd = alt_gnu_request["command"]
+                    if isinstance(cmd, str):
+                        alt_gnu_cmd = f"g{cmd}"
+                    else:
+                        alt_gnu_cmd = (f"g{cmd[0].strip()}", *cmd[1:])
+                    alt_gnu_request["command"] = alt_gnu_cmd
+                    results.append(alt_gnu_request)
+
+        return results
+
+    @typechecked
+    def _get_command_error_prefix(self, command_obj: Dict[str, Any]) -> str:
+        """Build error prefix string from command object metadata.
+
+        :param Dict[str, Any] command_obj: Command object with
+            implementation and type keys
+        :returns str: Error prefix in format '[implementation_type] '
+        :raises TypeError: If command_obj is not a dict
+        :raises ValueError: If required keys are missing
+        """
+        if not isinstance(command_obj, dict):
+            raise TypeError("Command object is not a dict")
+
+        cmd_implementation = command_obj.get("implementation")
+        if not cmd_implementation:
+            raise ValueError("Command object is missing implementation")
+
+        cmd_type = command_obj.get("type")
+        if not cmd_type:
+            raise ValueError("Command object is missing type")
+
+        return f"[{cmd_implementation}_{cmd_type}] "
+
+    @typechecked
+    def _process_command_result(
+        self,
+        cmd_completed: Dict[str, Any],
+        non_error_codes: Optional[list[int]] = None,
+    ) -> Tuple[Optional[str], Optional[list]]:
+        """Process command result: validate, parse, and validate output.
+
+        Extracts stdout from the command result, optionally runs a parser,
+        and optionally runs a validator. Returns parsed output or errors.
+
+        :param Dict[str, Any] cmd_completed: Completed command dict with
+            'result' key containing rc, stdout, stderr, plus optional
+            'parser' and 'validator' callables
+        :param Optional[list[int]] non_error_codes: Return codes considered
+            non-error. Defaults to [0]
+        :returns Tuple[Optional[str], Optional[list]]: (parsed_output, None)
+            on success, or (None, [errors]) on failure
+        :raises TypeError: If cmd_completed or result is not a dict
+        :raises ValueError: If required fields are missing or malformed
+        """
+        if non_error_codes is None:
+            non_error_codes = [0]
+
+        if not isinstance(cmd_completed, dict):
+            raise TypeError("Completed command not a dict")
+
+        e_prefix = self._get_command_error_prefix(cmd_completed)
+
+        cmd_result = cmd_completed.get("result")
+        if not isinstance(cmd_result, dict):
+            raise TypeError(f"{e_prefix}Command result is not a dict")
+
+        # Required fields
+        rc = cmd_result.get("rc")
+        if rc is None:
+            raise ValueError(f"{e_prefix}Command result is missing 'rc'")
+        try:
+            rc = int(rc)
+        except (ValueError, TypeError) as e:
+            raise ValueError(
+                f"{e_prefix}Command result 'rc' is not convertible to int"
+            ) from e
+        output = cmd_result.get("stdout")
+        if output is None:
+            raise ValueError(f"{e_prefix}Command result is missing 'stdout'")
+        if not isinstance(output, str):
+            raise ValueError(f"{e_prefix}Command result 'stdout' is not str")
+        output = output.rstrip("\n").replace("\r", "")
+
+        # Optional but validated if present
+        if "stderr" in cmd_result:
+            if not isinstance(cmd_result["stderr"], str):
+                raise ValueError(
+                    f"{e_prefix}Command result 'stderr' is not str"
+                )
+
+        # Check return code
+        if rc not in non_error_codes:
+            stderr = cmd_result.get("stderr", "").strip() or "No stderr"
+            return (
+                None,
+                [RuntimeError(
+                    f"{e_prefix}command exited with code {rc}: {stderr}"
+                )],
+            )
+
+        # Parse output (optional - defaults to pass-through)
+        parser = cmd_completed.get("parser")
+        if parser is None:
+            parsed_output = output
+        else:
+            if not isinstance(parser, Callable):
+                raise TypeError(f"{e_prefix}Parser is not callable")
+            parsed_output, parse_errors = parser(rc, output, e_prefix)
+            if parse_errors:
+                return None, parse_errors
+
+        # Validate output (optional)
+        validator = cmd_completed.get("validator")
+        if validator is not None:
+            if not isinstance(validator, Callable):
+                raise TypeError(f"{e_prefix}Validator is not callable")
+            validation_error = validator(parsed_output, e_prefix)
+            if validation_error is not None:
+                return None, [validation_error]
+
+        return parsed_output, None
+
+    @typechecked
     def _run_action(
         self,
         plugin_name: str,
@@ -256,236 +494,57 @@ class CoreActionBase:
         return result
 
     @typechecked
-    def _get_run_template(
+    def _command(
         self,
-        cmd_type: str,
-        cmd_variant: Optional[str] = None,
+        cmd: Union[str, list[str], tuple[str, ...]],
+        stdin: Optional[str] = None,
+        chdir: Optional[str] = None,
+        task_vars: Optional[Dict[str, Any]] = None,
+        check_mode: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        """Get command tuple, parser, and validator for a command type.
-
-        Retrieves the template configuration for executing and parsing
-        a specific command type. For templates with variants, the
-        variant-level values override template-level defaults.
-
-        Requires self._run_templates to be defined by the subclass.
-
-        :param str cmd_type: Command type key in _run_templates
-        :param Optional[str] cmd_variant: Variant name for commands
-            with multiple variants
-        :returns Dict[str, Any]: Dict containing:
-            - 'cmd': Command tuple with placeholders (e.g., '{path}')
-            - 'parser': Callable to parse command result
-            - 'validator': Optional callable to validate parsed data,
-              or None if no validator defined
-        :raises ValueError: If cmd_type or variant is invalid
-        :raises TypeError: If template structure is malformed
-        :raises AttributeError: If _run_templates is not defined
         """
-        templates = getattr(self, "_run_templates", None)
-        if templates is None:
-            raise AttributeError(
-                "_get_run_template requires _run_templates to be defined"
-            )
+        Run the cross-platform command action plugin.
 
-        template = templates.get(cmd_type)
-        e_prefix = f"[run_template][{cmd_type}] "
+        Executes a command via o0_o.core.command, which routes to the
+        appropriate platform-specific module (POSIX or Windows).
 
-        if template is None:
-            valid_types = ", ".join(f"'{t}'" for t in templates.keys())
-            raise ValueError(
-                f"{e_prefix}invalid template, valid options are {valid_types}"
-            )
-        if not isinstance(template, dict):
-            raise TypeError(f"{e_prefix}template is not a dict")
-
-        cmd = template.get("cmd")
-        parser = template.get("parser")
-        validator = template.get("validator")
-
-        # Get the command tuple from the template structure
-        if cmd_variant is not None:
-            e_prefix = f"{e_prefix}[{cmd_variant}] "
-            if "variants" not in template:
-                raise ValueError(f"{e_prefix}no variants in this template")
-            variants = template.get("variants")
-            if not isinstance(variants, dict):
-                raise TypeError(
-                    f"{e_prefix}malformed template, 'variants' is not a dict"
-                )
-            variant = variants.get(cmd_variant)
-            if variant is None:
-                valid_variants = ", ".join(f"'{v}'" for v in variants.keys())
-                raise ValueError(
-                    f"{e_prefix}invalid variant, valid options are "
-                    f"{valid_variants}"
-                )
-            if not isinstance(variant, dict):
-                raise TypeError(
-                    f"{e_prefix}malformed template, variant is not a dict"
-                )
-            cmd = variant.get("cmd", cmd)
-            parser = variant.get("parser", parser)
-            validator = variant.get("validator", validator)
-
-        elif "variants" in template:
-            raise ValueError(f"{e_prefix}requires a variant")
-
-        if cmd is None:
-            raise ValueError(f"{e_prefix}malformed template, missing command")
-        if not isinstance(cmd, tuple):
-            raise TypeError(f"{e_prefix}command is not a tuple")
-        if parser is None:
-            raise ValueError(f"{e_prefix}malformed template, missing a parser")
-        if not callable(parser):
-            raise TypeError(f"{e_prefix}parser is not callable")
-
-        return {"cmd": cmd, "parser": parser, "validator": validator}
-
-    @typechecked
-    def _get_template_command(
-        self,
-        cmd_type: str,
-        variant: Optional[str] = None,
-        **fmt_kwargs: str,
-    ) -> Dict[str, tuple]:
-        """Get command dict with generated key and formatted command tuple.
-
-        Returns a dict with keys built from cmd_type, format kwargs, and
-        variant(s). Command tuples have placeholders substituted with the
-        provided kwargs.
-
-        When a template has variants and no variant is specified, returns
-        commands for ALL variants. This allows a single call to generate
-        all variant commands for detection mode.
-
-        Key format: '{cmd_type}_{kwarg_val_1}_{kwarg_val_2}_...[_{variant}]'
-
-        Examples:
-            >>> self._get_template_command("sha256", "gnu", path="/tmp/foo")
-            {"sha256_/tmp/foo_gnu": ("sha256sum", "/tmp/foo")}
-
-            >>> self._get_template_command("sha256", path="/tmp/foo")
-            # Returns all variants if sha256 has variants defined
-            {
-                "sha256_/tmp/foo_gnu": ("sha256sum", "/tmp/foo"),
-                "sha256_/tmp/foo_bsd": ("sha256", "-q", "/tmp/foo"),
-                ...
-            }
-
-        :param str cmd_type: Command type key in _run_templates
-        :param Optional[str] variant: Variant name for commands with
-            multiple variants. If None and template has variants,
-            returns commands for all variants.
-        :param **fmt_kwargs: Keyword arguments for formatting the
-            command template (e.g., path='/tmp/file')
-        :returns Dict[str, tuple]: Dict with formatted key(s) and
-            command tuple(s)
-        :raises ValueError: If cmd_type or variant is invalid
-        :raises TypeError: If template structure is malformed
-        :raises KeyError: If required format keys are missing
+        :param Union[str, list[str], tuple[str, ...]] cmd: Command to
+            execute. Can be a shell string, list, or tuple of arguments.
+            Tuples are converted to lists automatically.
+        :param Optional[str] stdin: Optional standard input to pass to
+            the command
+        :param Optional[str] chdir: Change to this directory before
+            executing
+        :param Optional[Dict[str, Any]] task_vars: Dictionary of task
+            variables from the calling task
+        :param Optional[bool] check_mode: Optional override for Ansible
+            check mode
+        :returns Dict[str, Any]: The result dictionary from the command
+            plugin
+        :raises TypeError: If cmd is not a string, list, or tuple
         """
-        templates = getattr(self, "_run_templates", None)
-        if templates is None:
-            raise AttributeError(
-                "_get_template_command requires _run_templates to be defined"
-            )
+        task_vars = task_vars or {}
 
-        raw_template = templates.get(cmd_type)
-        if raw_template is None:
-            raise ValueError(f"[{cmd_type}] invalid template")
+        args: Dict[str, Any] = {}
 
-        # Check if template has variants and none specified
-        if variant is None and "variants" in raw_template:
-            # Compile commands for ALL variants
-            result: Dict[str, tuple] = {}
-            for var_name in raw_template["variants"].keys():
-                result.update(
-                    self._get_template_command(cmd_type, var_name, **fmt_kwargs)
-                )
-            return result
+        if stdin is not None:
+            args["stdin"] = stdin
+        if chdir is not None:
+            args["chdir"] = chdir
 
-        # Single command (either specific variant or no variants)
-        template = self._get_run_template(cmd_type, variant)
-        cmd = template["cmd"]
-        cmd_tuple = tuple(
-            arg.format(**fmt_kwargs) if "{" in arg else arg for arg in cmd
-        )
-
-        # Build key: cmd_type_kwarg_vals_variant
-        key_parts = [cmd_type]
-        key_parts.extend(list(fmt_kwargs.values()))
-        if variant is not None:
-            key_parts.append(variant)
-        key = "_".join(str(p) for p in key_parts)
-
-        return {key: cmd_tuple}
-
-    @typechecked
-    def _parse_template_result(
-        self,
-        run_result: Dict[str, Any],
-        prefix: str,
-        key: str,
-    ) -> tuple:
-        """Parse command result(s) for a template key.
-
-        Handles both simple templates (single command) and variant
-        templates (multiple command variants). For variants, tries
-        each until one succeeds.
-
-        :param Dict[str, Any] run_result: Command results dict from _run()
-        :param str prefix: Prefix for result keys (e.g., path or
-            command name)
-        :param str key: Template key in _run_templates
-        :returns tuple[Dict[str, Any], list[Exception]]: Tuple of
-            (parsed_data dict, list of errors). On success, errors
-            list is empty.
-        """
-        templates = getattr(self, "_run_templates", None)
-        if templates is None:
-            raise AttributeError(
-                "_parse_template_result requires _run_templates to be defined"
-            )
-
-        template = templates.get(key)
-        if template is None:
-            return {}, []
-
-        errors: list = []
-        data: Dict[str, Any] = {}
-
-        if "variants" in template:
-            # Template with variants - try each until one succeeds
-            shared_parser = template.get("parser")
-            for variant, variant_entry in template["variants"].items():
-                result_key = f"{key}_{prefix}_{variant}"
-                result = run_result.get(result_key)
-                if result is not None:
-                    parser = variant_entry.get("parser", shared_parser)
-                    if parser is None:
-                        raise ValueError(
-                            f"[{key}] No parser for variant '{variant}'"
-                        )
-                    data, error = parser(result)
-                    if error:
-                        errors.extend(
-                            error if isinstance(error, list) else [error]
-                        )
-                    if data and not error:
-                        errors = []
-                        break
+        if isinstance(cmd, str):
+            args["cmd"] = cmd
+        elif isinstance(cmd, (list, tuple)):
+            args["argv"] = list(cmd)
         else:
-            # Simple template - single command
-            result_key = f"{key}_{prefix}"
-            result = run_result.get(result_key)
-            if result is not None:
-                parser = template.get("parser")
-                if parser is None:
-                    raise ValueError(f"[{key}] No parser defined")
-                data, error = parser(result)
-                if error:
-                    errors.extend(
-                        error if isinstance(error, list) else [error]
-                    )
+            raise TypeError(
+                f"Expected cmd to be str, list, or tuple, "
+                f"got {type(cmd).__name__}"
+            )
 
-        return data, errors
+        return self._run_action(
+            "o0_o.core.command",
+            args,
+            task_vars=task_vars,
+            check_mode=check_mode,
+        )

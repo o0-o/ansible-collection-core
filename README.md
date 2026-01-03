@@ -20,9 +20,15 @@ https://o0-o.github.io/ansible-collection-core/
 ansible-galaxy collection install o0_o.core
 ```
 
+> **Note:** This collection is designed as the entry point for the entire
+> `o0_o` namespace. Installing `o0_o.core` will automatically install all
+> related collections (`o0_o.posix`, `o0_o.windows`, `o0_o.utils`).
+
 ## Dependencies
 
+- `o0_o.posix` >= 1.0.0
 - `o0_o.utils` >= 2.0.0
+- `o0_o.windows` >= 0.1.0
 
 ## Contributing
 

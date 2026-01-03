@@ -1,0 +1,33 @@
+# vim: ts=2:sw=2:sts=2:et:ft=yaml.ansible
+# -*- mode: yaml; yaml-indent-offset: 2; indent-tabs-mode: nil; -*-
+---
+# GNU General Public License v3.0+
+# SPDX-License-Identifier: GPL-3.0-or-later
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+# Copyright (c) 2025 oØ.o (@o0-o)
+#
+# This file is part of the o0_o.core Ansible Collection.
+
+- name: Run whoami module
+  o0_o.core.whoami:
+  register: whoami_reg
+
+- name: Assert whoami succeeded
+  ansible.builtin.assert:
+    that:
+      - whoami_reg is success
+      - whoami_reg is not changed
+      - whoami_reg['user'] is defined
+      - whoami_reg['user'] | length > 0
+
+- name: Assert user matches current user
+  ansible.builtin.assert:
+    that:
+      - whoami_reg['user'] == ansible_user_id
+  when: ansible_user_id is defined
+
+- name: Verify whoami output is a string
+  ansible.builtin.assert:
+    that:
+      - whoami_reg['user'] is string
