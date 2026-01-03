@@ -20,7 +20,7 @@ tags:
 dependencies:
   o0_o.posix: '>=1.4.3'
   o0_o.utils: '>=2.0.0'
-  o0_o.windows: '>=0.1.0'
+  o0_o.windows: '>=1.0.0'
   ansible.windows: '>=2.0.0'
 repository: https://github.com/o0-o/ansible-collection-core
 issues: https://github.com/o0-o/ansible-collection-core/issues
