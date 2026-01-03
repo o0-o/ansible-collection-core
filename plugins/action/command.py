@@ -27,23 +27,10 @@ from typing import Any, Optional
 
 from ansible.plugins.action import ActionBase
 
-from ansible_collections.o0_o.windows.plugins.module_utils import (
-    WindowsActionBase,
-)
-
-# TODO: Remove fallback once o0_o.posix v2 is published
-# v2 uses module_utils.PosixActionBase, v1.x uses action_utils.PosixBase
-try:
-    from ansible_collections.o0_o.posix.plugins.module_utils import (
-        PosixActionBase,
-    )
-except ImportError:
-    from ansible_collections.o0_o.posix.plugins.action_utils import (
-        PosixBase as PosixActionBase,
-    )
+from ansible_collections.o0_o.core.plugins.module_utils import CoreActionBase
 
 
-class ActionModule(PosixActionBase, WindowsActionBase, ActionBase):
+class ActionModule(CoreActionBase, ActionBase):
     """Cross-platform command dispatcher action plugin.
 
     Automatically routes command execution to the appropriate
@@ -103,19 +90,17 @@ class ActionModule(PosixActionBase, WindowsActionBase, ActionBase):
         }
 
         # Determine target module based on connection type
-        if self._is_posix_connection():
-            target_module = "o0_o.posix.command"
-        elif self._is_windows_connection():
-            target_module = "ansible.windows.win_command"
-        else:
+        try:
+            platform = self._get_platform_type()
+        except ValueError as e:
             result["failed"] = True
-            connection_type = self._get_connection_type()
-            result["msg"] = (
-                f"o0_o.core.command only supports POSIX or Windows "
-                f"connections. Connection '{connection_type}' is not "
-                "recognized as either."
-            )
+            result["msg"] = str(e)
             return result
+
+        if platform == "posix":
+            target_module = "o0_o.posix.command"
+        else:  # windows
+            target_module = "ansible.windows.win_command"
 
         self._display.vvv(f"Delegating to {target_module}")
 

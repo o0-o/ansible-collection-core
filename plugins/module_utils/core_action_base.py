@@ -53,6 +53,51 @@ from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
 )
 
 
+# Connection types mapped to platform categories
+POSIX_CONNECTIONS = frozenset(
+    {
+        # Core Ansible connections
+        "local",
+        "ssh",
+        "ansible.builtin.local",
+        "ansible.builtin.ssh",
+        # Container runtimes
+        "docker",
+        "podman",
+        "buildah",
+        "community.docker.docker",
+        "community.docker.docker_api",
+        "containers.podman.podman",
+        "containers.podman.buildah",
+        # Orchestration (Kubernetes/OpenShift)
+        "kubectl",
+        "oc",
+        "kubernetes.core.kubectl",
+        "community.okd.oc",
+        # Jails/Zones (BSD/Solaris)
+        "jail",
+        "zone",
+        "community.general.jail",
+        "community.general.zone",
+        # Other POSIX-compatible
+        "lxc",
+        "lxd",
+        "chroot",
+        "community.general.lxc",
+        "community.general.lxd",
+        "community.general.chroot",
+    }
+)
+WINDOWS_CONNECTIONS = frozenset(
+    {
+        "winrm",
+        "psrp",
+        "ansible.builtin.winrm",
+        "ansible.builtin.psrp",
+    }
+)
+
+
 class CoreActionBase:
     """
     Mixin class for Ansible action plugins with cross-platform support.
@@ -150,6 +195,27 @@ class CoreActionBase:
         :returns str: Connection type (e.g., 'ssh', 'winrm', 'local')
         """
         return getattr(self._play_context, "connection", "ssh")
+
+    @typechecked
+    def _get_platform_type(self) -> str:
+        """Get the platform type based on connection plugin.
+
+        Maps the connection plugin to a platform category for routing
+        to platform-specific modules.
+
+        :returns str: Platform type ('posix' or 'windows')
+        :raises ValueError: If connection type is not recognized
+        """
+        connection_type = self._get_connection_type()
+        if connection_type in POSIX_CONNECTIONS:
+            return "posix"
+        if connection_type in WINDOWS_CONNECTIONS:
+            return "windows"
+        raise ValueError(
+            f"Connection '{connection_type}' is not recognized as POSIX "
+            f"({', '.join(sorted(POSIX_CONNECTIONS))}) or Windows "
+            f"({', '.join(sorted(WINDOWS_CONNECTIONS))})"
+        )
 
     @typechecked
     def _def_inventory_hostname(
