@@ -25,14 +25,17 @@ from ansible_collections.o0_o.core.plugins.module_utils.parsers import (
 class TestStripOnly:
     """Tests for strip_only parser function."""
 
-    @pytest.mark.parametrize("input_str,expected", [
-        ("hello\n", "hello"),
-        ("  hello", "hello"),
-        ("  hello  \n", "hello"),
-        ("hello world", "hello world"),
-        ("", ""),
-        ("   \n\t  ", ""),
-    ])
+    @pytest.mark.parametrize(
+        "input_str,expected",
+        [
+            ("hello\n", "hello"),
+            ("  hello", "hello"),
+            ("  hello  \n", "hello"),
+            ("hello world", "hello world"),
+            ("", ""),
+            ("   \n\t  ", ""),
+        ],
+    )
     def test_strip_whitespace(self, input_str: str, expected: str) -> None:
         """Test parser strips leading/trailing whitespace correctly."""
         output, errors = strip_only(0, input_str, "[test] ")

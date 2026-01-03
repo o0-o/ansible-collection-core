@@ -73,7 +73,9 @@ class TestCommandSpecStructure:
             ("core", "whoami"),
         ],
     )
-    def test_all_commands_have_templates(self, impl: str, cmd_type: str) -> None:
+    def test_all_commands_have_templates(
+        self, impl: str, cmd_type: str
+    ) -> None:
         """Test all commands have non-empty templates."""
         template = COMMAND_SPEC[impl][cmd_type]["template"]
         assert template, f"{impl}.{cmd_type} has empty template"

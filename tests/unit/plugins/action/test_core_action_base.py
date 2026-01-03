@@ -22,11 +22,14 @@ from ansible_collections.o0_o.core.tests.utils import boom
 class TestGetCommandErrorPrefix:
     """Tests for _get_command_error_prefix method."""
 
-    @pytest.mark.parametrize("impl,cmd_type,expected", [
-        ("core", "whoami", "[core_whoami] "),
-        ("gnu", "stat", "[gnu_stat] "),
-        ("bsd", "ls", "[bsd_ls] "),
-    ])
+    @pytest.mark.parametrize(
+        "impl,cmd_type,expected",
+        [
+            ("core", "whoami", "[core_whoami] "),
+            ("gnu", "stat", "[gnu_stat] "),
+            ("bsd", "ls", "[bsd_ls] "),
+        ],
+    )
     def test_valid_prefix(
         self, base, impl: str, cmd_type: str, expected: str
     ) -> None:
@@ -154,7 +157,9 @@ class TestProcessCommandResult:
             "implementation": "core",
             "type": "hello_world",
             "result": {"rc": 0, "stdout": "Wrong output", "stderr": ""},
-            "validator": lambda output, prefix: ValueError("validation failed"),
+            "validator": lambda output, prefix: ValueError(
+                "validation failed"
+            ),
         }
         output, errors = base._process_command_result(cmd_completed)
         assert output is None

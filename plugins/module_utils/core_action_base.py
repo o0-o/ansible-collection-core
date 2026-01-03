@@ -274,9 +274,11 @@ class CoreActionBase:
                     cmd_default_name = cmd_str.split()[0]
                 elif isinstance(template, Iterable):
                     cmd_tuple = tuple(
-                        arg.format(**cmd_kwargs)
-                        if isinstance(arg, str)
-                        else arg
+                        (
+                            arg.format(**cmd_kwargs)
+                            if isinstance(arg, str)
+                            else arg
+                        )
                         for arg in template
                     )
                     if not cmd_tuple:
@@ -398,9 +400,11 @@ class CoreActionBase:
             stderr = cmd_result.get("stderr", "").strip() or "No stderr"
             return (
                 None,
-                [RuntimeError(
-                    f"{e_prefix}command exited with code {rc}: {stderr}"
-                )],
+                [
+                    RuntimeError(
+                        f"{e_prefix}command exited with code {rc}: {stderr}"
+                    )
+                ],
             )
 
         # Parse output (optional - defaults to pass-through)
