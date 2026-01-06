@@ -170,6 +170,7 @@ def process_command_spec(
 def process_command_result(
     cmd_completed: dict[str, Any],
     non_error_codes: Optional[list[int]] = None,
+    parser_args: Optional[dict[str, Any]] = None,
 ) -> tuple[Optional[str], Optional[list]]:
     """Process command result: validate, parse, and validate output.
 
@@ -182,6 +183,8 @@ def process_command_result(
         optional 'parser' and 'validator' callables
     :param Optional[list[int]] non_error_codes: Return codes
         considered non-error. Defaults to [0]
+    :param Optional[dict[str, Any]] parser_args: Additional keyword
+        arguments to pass to the parser function
     :returns tuple[Optional[str], Optional[list]]:
         (parsed_output, None) on success, or (None, [errors]) on
         failure
@@ -243,7 +246,14 @@ def process_command_result(
     else:
         if not isinstance(parser, Callable):
             raise TypeError(f"{e_prefix}Parser is not callable")
-        parsed_output, parse_errors = parser(rc, output, e_prefix)
+        if parser_args:
+            if not isinstance(parser_args, dict):
+                raise TypeError(f"{e_prefix}parser_args is not a dict")
+            parsed_output, parse_errors = parser(
+                rc, output, e_prefix, **parser_args
+            )
+        else:
+            parsed_output, parse_errors = parser(rc, output, e_prefix)
         if parse_errors:
             return None, parse_errors
 
