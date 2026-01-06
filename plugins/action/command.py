@@ -91,7 +91,7 @@ class ActionModule(CoreActionBase, ActionBase):
 
         # Determine target module based on connection type
         try:
-            platform = self._get_platform_type()
+            platform = self._get_platform()
         except ValueError as e:
             result["failed"] = True
             result["msg"] = str(e)

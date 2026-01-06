@@ -17,10 +17,7 @@ connection plugins to platform types (POSIX or Windows).
 
 from __future__ import annotations
 
-from typing import Dict, FrozenSet
-
-
-CONNECTION_BY_PLATFORM: Dict[str, FrozenSet[str]] = {
+CONNECTION_BY_PLATFORM: dict[str, frozenset[str]] = {
     "posix": frozenset(
         {
             # Core Ansible connections

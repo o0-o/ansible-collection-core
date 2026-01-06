@@ -25,8 +25,13 @@ from ansible.plugins.action import ActionBase
 from ansible_collections.o0_o.core.plugins.module_utils import (
     CoreActionBase,
 )
-from ansible_collections.o0_o.utils.plugins.module_utils import (
+from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
+    COMMAND_SPEC,
+)
+from ansible_collections.o0_o.core.plugins.module_utils.command_utils import (
     format_error_message,
+    process_command_result,
+    process_command_spec,
 )
 
 
@@ -56,7 +61,7 @@ class ActionModule(CoreActionBase, ActionBase):
         del tmp  # unused
 
         # Process command spec to get command requests
-        cmd_requests = self._process_command_spec("whoami")
+        cmd_requests = process_command_spec(COMMAND_SPEC, "whoami")
 
         if not cmd_requests:
             result["failed"] = True
@@ -77,7 +82,7 @@ class ActionModule(CoreActionBase, ActionBase):
         cmd_completed["result"] = cmd_result
 
         # Process the completed command
-        output, errors = self._process_command_result(cmd_completed)
+        output, errors = process_command_result(cmd_completed)
 
         result["changed"] = False
         result["invocation"] = self._task.args.copy()

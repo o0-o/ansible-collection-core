@@ -35,14 +35,14 @@ Subclasses in other collections can extend COMMAND_SPEC by merging::
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from ansible_collections.o0_o.core.plugins.module_utils.parsers import (
     strip_only,
     validate_hello_world,
 )
 
-COMMAND_SPEC: Dict[str, Dict[str, Any]] = {
+COMMAND_SPEC: dict[str, dict[str, Any]] = {
     "core": {
         "hello_world": {
             "template": ("echo", "Hello, world!"),

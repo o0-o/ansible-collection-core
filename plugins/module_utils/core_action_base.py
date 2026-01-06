@@ -14,43 +14,22 @@ Base class for Ansible action plugins with cross-platform support.
 
 This module provides a mixin class with utilities for action plugins,
 including inventory hostname detection, command timing display,
-inter-plugin delegation, cross-platform command execution, and
-command specification processing.
+inter-plugin delegation, and cross-platform command execution.
 
-Command Specification Structure:
-    {
-        "implementation": {
-            "cmd_type": {
-                "template": ("command", "arg1", "{placeholder}"),
-                "parser": optional_parser_function,
-                "validator": optional_validator_function,
-            },
-        },
-    }
-
-Parser functions receive (rc, output, e_prefix) and return:
-    (parsed_output, error_list_or_none)
-
-Validator functions receive (parsed_output, e_prefix) and return:
-    Optional[Exception] - None if valid, exception if invalid
-
-If no parser is specified, stdout is returned as-is.
+For command specification processing, see command_utils.py which
+provides standalone functions that can be used with any COMMAND_SPEC.
 """
 
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Iterable
 from contextlib import contextmanager
-from typing import Any, Dict, Generator, Optional, Tuple, Union
+from typing import Any, Generator, Optional, Union
 
 from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import (  # noqa: E501
     typechecked,
 )
 
-from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
-    COMMAND_SPEC,
-)
 from ansible_collections.o0_o.core.plugins.module_utils.connection import (
     CONNECTION_BY_PLATFORM,
 )
@@ -69,18 +48,10 @@ class CoreActionBase:
     - Command timing display for debugging
     - Inter-plugin delegation using FQCNs
     - Cross-platform command execution via _command()
-    - Command specification processing via _process_command_spec()
     - Binary-safe command execution context manager
 
-    Command specifications are defined in COMMAND_SPEC class attribute.
-    Subclasses can extend by merging their specs:
-
-        class PosixActionBase(CoreActionBase):
-            COMMAND_SPEC = {
-                **CoreActionBase.COMMAND_SPEC,
-                "gnu": {"stat": {...}},
-                "bsd": {"stat": {...}},
-            }
+    For command specification processing, import the standalone
+    functions from command_utils and your COMMAND_SPEC directly.
 
     Note: @typechecked is applied to methods rather than the class to
     avoid metaclass conflicts when subclasses also inherit from Ansible
@@ -96,9 +67,6 @@ class CoreActionBase:
             def run(self, tmp=None, task_vars=None):
                 ...
     """
-
-    # Command specifications - subclasses extend via dict merge
-    COMMAND_SPEC: Dict[str, Dict[str, Any]] = COMMAND_SPEC
 
     @contextmanager
     @typechecked
@@ -155,13 +123,13 @@ class CoreActionBase:
         return getattr(self._play_context, "connection", "ssh")
 
     @typechecked
-    def _get_platform_type(self) -> str:
-        """Get the platform type based on connection plugin.
+    def _get_platform(self) -> str:
+        """Get the platform based on connection plugin.
 
         Maps the connection plugin to a platform category for routing
         to platform-specific modules.
 
-        :returns str: Platform type ('posix' or 'windows')
+        :returns str: Platform ('posix' or 'windows')
         :raises ValueError: If connection type is not recognized
         """
         connection_type = self._get_connection_type()
@@ -180,7 +148,7 @@ class CoreActionBase:
 
     @typechecked
     def _def_inventory_hostname(
-        self, task_vars: Optional[Dict[str, Any]] = None
+        self, task_vars: Optional[dict[str, Any]] = None
     ) -> str:
         """Get/define the inventory hostname for log/warning messages.
 
@@ -213,260 +181,13 @@ class CoreActionBase:
         return self.inventory_hostname
 
     @typechecked
-    def _display_longest_command(
-        self, commands_result: Dict[str, Any], context: str = ""
-    ) -> None:
-        """Display debug information about the longest running command.
-
-        :param dict commands_result: Result from _run() call
-        :param str context: Context description for the debug message
-        """
-        if not isinstance(commands_result.get("commands"), dict):
-            return
-
-        # Find the longest running command
-        longest_cmd = None
-        longest_elapsed = 0
-
-        for cmd_key, cmd_result in commands_result["commands"].items():
-            if "elapsed" in cmd_result:
-                elapsed = cmd_result["elapsed"].get("seconds", 0)
-                if elapsed > longest_elapsed:
-                    longest_elapsed = elapsed
-                    longest_cmd = cmd_result.get("cmd", cmd_key)
-
-        context_str = f" ({context})" if context else ""
-        if longest_elapsed > 0:
-            self._display.vvv(
-                f"[{self.inventory_hostname}] Longest command{context_str}: "
-                f"{longest_cmd} took {longest_elapsed}s"
-            )
-        else:
-            self._display.vvv(
-                f"[{self.inventory_hostname}] All commands{context_str} "
-                f"completed in under 1 second"
-            )
-
-    @typechecked
-    def _process_command_spec(
-        self,
-        cmd_type: str,
-        **cmd_kwargs: str,
-    ) -> list[Dict[str, Any]]:
-        """Process command spec and return list of command requests.
-
-        Looks up cmd_type in self.COMMAND_SPEC across all
-        implementations and builds command request dicts with
-        formatted templates.
-
-        :param str cmd_type: Command type to look up
-        :param **cmd_kwargs: Format arguments for command template
-        :returns list[Dict[str, Any]]: List of command request dicts
-        :raises TypeError: If spec structure is malformed
-        :raises ValueError: If template is missing or empty
-        """
-        results: list[Dict[str, Any]] = []
-        spec = self.COMMAND_SPEC
-
-        if not isinstance(spec, dict):
-            raise TypeError("COMMAND_SPEC is not a dict")
-
-        for implementation_name, implementation in spec.items():
-            if not isinstance(implementation, dict):
-                raise TypeError(
-                    f"The {implementation_name} implementation in "
-                    "COMMAND_SPEC is not a dict"
-                )
-            variant = implementation.get(cmd_type)
-            if variant is not None:
-                if not isinstance(variant, dict):
-                    raise TypeError(
-                        f"[{implementation_name}] Command type {cmd_type} is "
-                        "not a dict"
-                    )
-                cmd_request = variant.copy()
-                cmd_request["implementation"] = implementation_name
-                cmd_request["type"] = cmd_type
-                e_prefix = self._get_command_error_prefix(cmd_request)
-                template = cmd_request.pop("template", None)
-                if template is None:
-                    raise ValueError(
-                        f"{e_prefix}Command specification is missing a "
-                        "template"
-                    )
-                if isinstance(template, str):
-                    cmd_str = template.format(**cmd_kwargs).strip()
-                    if not cmd_str:
-                        raise ValueError(f"{e_prefix}Command is empty")
-                    cmd_request["command"] = cmd_str
-                    cmd_default_name = cmd_str.split()[0]
-                elif isinstance(template, Iterable):
-                    cmd_tuple = tuple(
-                        (
-                            arg.format(**cmd_kwargs)
-                            if isinstance(arg, str)
-                            else arg
-                        )
-                        for arg in template
-                    )
-                    if not cmd_tuple:
-                        raise ValueError(f"{e_prefix}Command is empty")
-                    if not isinstance(cmd_tuple[0], str):
-                        raise TypeError(
-                            f"{e_prefix}Command (without args) is not a "
-                            "string"
-                        )
-                    if cmd_tuple[0] == "":
-                        raise ValueError(
-                            f"{e_prefix}Command (without args) is empty"
-                        )
-                    cmd_request["command"] = cmd_tuple
-                    cmd_default_name = cmd_tuple[0].strip()
-                else:
-                    raise TypeError(
-                        f"{e_prefix}Template is not a string or iterable"
-                    )
-                cmd_request["name"] = (
-                    cmd_request.get("name") or cmd_default_name
-                )
-                results.append(cmd_request)
-                if implementation_name == "gnu":
-                    # gnu commands may be prefixed with 'g'
-                    alt_gnu_request = cmd_request.copy()
-                    cmd = alt_gnu_request["command"]
-                    if isinstance(cmd, str):
-                        alt_gnu_cmd = f"g{cmd}"
-                    else:
-                        alt_gnu_cmd = (f"g{cmd[0].strip()}", *cmd[1:])
-                    alt_gnu_request["command"] = alt_gnu_cmd
-                    results.append(alt_gnu_request)
-
-        return results
-
-    @typechecked
-    def _get_command_error_prefix(self, command_obj: Dict[str, Any]) -> str:
-        """Build error prefix string from command object metadata.
-
-        :param Dict[str, Any] command_obj: Command object with
-            implementation and type keys
-        :returns str: Error prefix in format '[implementation_type] '
-        :raises TypeError: If command_obj is not a dict
-        :raises ValueError: If required keys are missing
-        """
-        if not isinstance(command_obj, dict):
-            raise TypeError("Command object is not a dict")
-
-        cmd_implementation = command_obj.get("implementation")
-        if not cmd_implementation:
-            raise ValueError("Command object is missing implementation")
-
-        cmd_type = command_obj.get("type")
-        if not cmd_type:
-            raise ValueError("Command object is missing type")
-
-        return f"[{cmd_implementation}_{cmd_type}] "
-
-    @typechecked
-    def _process_command_result(
-        self,
-        cmd_completed: Dict[str, Any],
-        non_error_codes: Optional[list[int]] = None,
-    ) -> Tuple[Optional[str], Optional[list]]:
-        """Process command result: validate, parse, and validate output.
-
-        Extracts stdout from the command result, optionally runs a
-        parser, and optionally runs a validator. Returns parsed output
-        or errors.
-
-        :param Dict[str, Any] cmd_completed: Completed command dict
-            with 'result' key containing rc, stdout, stderr, plus
-            optional 'parser' and 'validator' callables
-        :param Optional[list[int]] non_error_codes: Return codes
-            considered non-error. Defaults to [0]
-        :returns Tuple[Optional[str], Optional[list]]:
-            (parsed_output, None) on success, or (None, [errors]) on
-            failure
-        :raises TypeError: If cmd_completed or result is not a dict
-        :raises ValueError: If required fields are missing or malformed
-        """
-        if non_error_codes is None:
-            non_error_codes = [0]
-
-        if not isinstance(cmd_completed, dict):
-            raise TypeError("Completed command not a dict")
-
-        e_prefix = self._get_command_error_prefix(cmd_completed)
-
-        cmd_result = cmd_completed.get("result")
-        if not isinstance(cmd_result, dict):
-            raise TypeError(f"{e_prefix}Command result is not a dict")
-
-        # Required fields
-        rc = cmd_result.get("rc")
-        if rc is None:
-            raise ValueError(f"{e_prefix}Command result is missing 'rc'")
-        try:
-            rc = int(rc)
-        except (ValueError, TypeError) as e:
-            raise ValueError(
-                f"{e_prefix}Command result 'rc' is not convertible to int"
-            ) from e
-        output = cmd_result.get("stdout")
-        if output is None:
-            raise ValueError(f"{e_prefix}Command result is missing 'stdout'")
-        if not isinstance(output, str):
-            raise ValueError(f"{e_prefix}Command result 'stdout' is not str")
-        output = output.rstrip("\n").replace("\r", "")
-
-        # Optional but validated if present
-        if "stderr" in cmd_result:
-            if not isinstance(cmd_result["stderr"], str):
-                raise ValueError(
-                    f"{e_prefix}Command result 'stderr' is not str"
-                )
-
-        # Check return code
-        if rc not in non_error_codes:
-            stderr = cmd_result.get("stderr", "").strip() or "No stderr"
-            return (
-                None,
-                [
-                    RuntimeError(
-                        f"{e_prefix}command exited with code {rc}: {stderr}"
-                    )
-                ],
-            )
-
-        # Parse output (optional - defaults to pass-through)
-        parser = cmd_completed.get("parser")
-        if parser is None:
-            parsed_output = output
-        else:
-            if not isinstance(parser, Callable):
-                raise TypeError(f"{e_prefix}Parser is not callable")
-            parsed_output, parse_errors = parser(rc, output, e_prefix)
-            if parse_errors:
-                return None, parse_errors
-
-        # Validate output (optional)
-        validator = cmd_completed.get("validator")
-        if validator is not None:
-            if not isinstance(validator, Callable):
-                raise TypeError(f"{e_prefix}Validator is not callable")
-            validation_error = validator(parsed_output, e_prefix)
-            if validation_error is not None:
-                return None, [validation_error]
-
-        return parsed_output, None
-
-    @typechecked
     def _run_action(
         self,
         plugin_name: str,
-        plugin_args: Dict[str, Any],
-        task_vars: Optional[Dict[str, Any]] = None,
+        plugin_args: dict[str, Any],
+        task_vars: Optional[dict[str, Any]] = None,
         check_mode: Optional[bool] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Execute another action plugin using the provided arguments.
 
@@ -533,9 +254,9 @@ class CoreActionBase:
         cmd: Union[str, list[str], tuple[str, ...]],
         stdin: Optional[str] = None,
         chdir: Optional[str] = None,
-        task_vars: Optional[Dict[str, Any]] = None,
+        task_vars: Optional[dict[str, Any]] = None,
         check_mode: Optional[bool] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Run the cross-platform command action plugin.
 
@@ -549,17 +270,17 @@ class CoreActionBase:
             the command
         :param Optional[str] chdir: Change to this directory before
             executing
-        :param Optional[Dict[str, Any]] task_vars: Dictionary of task
+        :param Optional[dict[str, Any]] task_vars: Dictionary of task
             variables from the calling task
         :param Optional[bool] check_mode: Optional override for Ansible
             check mode
-        :returns Dict[str, Any]: The result dictionary from the command
+        :returns dict[str, Any]: The result dictionary from the command
             plugin
         :raises TypeError: If cmd is not a string, list, or tuple
         """
         task_vars = task_vars or {}
 
-        args: Dict[str, Any] = {}
+        args: dict[str, Any] = {}
 
         if stdin is not None:
             args["stdin"] = stdin
