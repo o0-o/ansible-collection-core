@@ -47,7 +47,7 @@ from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import
 
 
 @typechecked
-def get_command_error_prefix(command_obj: dict[str, Any]) -> str:
+def _get_command_error_prefix(command_obj: dict[str, Any]) -> str:
     """Build error prefix string from command object metadata.
 
     :param dict[str, Any] command_obj: Command object with
@@ -109,7 +109,7 @@ def process_command_spec(
             cmd_request = variant.copy()
             cmd_request["implementation"] = implementation_name
             cmd_request["type"] = cmd_type
-            e_prefix = get_command_error_prefix(cmd_request)
+            e_prefix = _get_command_error_prefix(cmd_request)
             template = cmd_request.pop("template", None)
             if template is None:
                 raise ValueError(
@@ -194,7 +194,7 @@ def process_command_result(
     if not isinstance(cmd_completed, dict):
         raise TypeError("Completed command not a dict")
 
-    e_prefix = get_command_error_prefix(cmd_completed)
+    e_prefix = _get_command_error_prefix(cmd_completed)
 
     cmd_result = cmd_completed.get("result")
     if not isinstance(cmd_result, dict):
