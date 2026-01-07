@@ -73,16 +73,18 @@ def _get_command_error_prefix(command_obj: dict[str, Any]) -> str:
 @typechecked
 def process_command_spec(
     spec: dict[str, dict[str, Any]],
-    cmd_type: str,
+    cmd_type: Optional[str] = None,
     **cmd_kwargs: str,
 ) -> list[dict[str, Any]]:
     """Process command spec and return list of command requests.
 
     Looks up cmd_type in spec across all implementations and builds
-    command request dicts with formatted templates.
+    command request dicts with formatted templates. If cmd_type is
+    None, processes all command types in the spec.
 
     :param dict[str, dict[str, Any]] spec: Command specification dict
-    :param str cmd_type: Command type to look up
+    :param Optional[str] cmd_type: Command type to look up, or None
+        to process all types
     :param **cmd_kwargs: Format arguments for command template
     :returns list[dict[str, Any]]: List of command request dicts
     :raises TypeError: If spec structure is malformed
@@ -99,16 +101,26 @@ def process_command_spec(
                 f"The {implementation_name} implementation in "
                 "COMMAND_SPEC is not a dict"
             )
-        variant = implementation.get(cmd_type)
-        if variant is not None:
+
+        # Determine which command types to process
+        if cmd_type is not None:
+            types_to_process = (
+                [(cmd_type, implementation.get(cmd_type))]
+                if cmd_type in implementation
+                else []
+            )
+        else:
+            types_to_process = list(implementation.items())
+
+        for type_name, variant in types_to_process:
             if not isinstance(variant, dict):
                 raise TypeError(
-                    f"[{implementation_name}] Command type {cmd_type} is "
+                    f"[{implementation_name}] Command type {type_name} is "
                     "not a dict"
                 )
             cmd_request = variant.copy()
             cmd_request["implementation"] = implementation_name
-            cmd_request["type"] = cmd_type
+            cmd_request["type"] = type_name
             e_prefix = _get_command_error_prefix(cmd_request)
             template = cmd_request.pop("template", None)
             if template is None:
