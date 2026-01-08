@@ -38,7 +38,7 @@ If no parser is specified, stdout is returned as-is.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Collection, Iterable
 from typing import Any, Optional, Union
 
 from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import (  # noqa: E501
@@ -208,8 +208,10 @@ def process_command_result(
 
     # Get non_error_codes from spec, default to [0]
     non_error_codes = cmd_completed.get("non_error_codes", [0])
-    if not isinstance(non_error_codes, list):
-        raise TypeError(f"{e_prefix}non_error_codes is not a list")
+    if not isinstance(non_error_codes, Collection) or isinstance(
+        non_error_codes, str
+    ):
+        raise TypeError(f"{e_prefix}non_error_codes is not a collection")
 
     cmd_result = cmd_completed.get("result")
     if not isinstance(cmd_result, dict):

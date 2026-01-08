@@ -32,11 +32,17 @@ Subclasses in other collections can extend COMMAND_SPEC by merging::
 
     COMMAND_SPEC = {
         **CORE_COMMAND_SPEC,
-        "gnu": {
-            "stat": {
-                "template": ("stat", "-c", "%s", "{path}"),
-                "parser": parse_stat,
-                "parser_kwargs": {"format": "gnu"},
+        "posix": {
+            "lookup_stat": {
+                "template": ("command", "-v", "stat"),
+                "non_error_codes": (0, 1),
+                "parser": parse_command_lookup,
+                "parser_kwargs": {"commands_requested": ["stat"]},
+            },
+            "list_path": {
+                "template": ("ls", "-d", "{path}"),
+                "parser": parse_ls,
+                "validator": validate_ls,
             },
         },
     }
