@@ -12,8 +12,14 @@
 """Command specifications for cross-platform command execution.
 
 This module defines command templates organized by implementation type.
-Each specification includes a template, optional parser, and optional
-validator. If no parser is specified, stdout is returned as-is.
+Each specification includes:
+
+- template (required): Command as string or tuple of arguments
+- parser (optional): Callable to parse stdout
+- parser_kwargs (optional): Default keyword arguments for parser
+- validator (optional): Callable to validate parsed output
+
+If no parser is specified, stdout is returned as-is.
 
 Subclasses in other collections can extend COMMAND_SPEC by merging::
 
@@ -28,6 +34,7 @@ Subclasses in other collections can extend COMMAND_SPEC by merging::
             "stat": {
                 "template": ("stat", "-c", "%s", "{path}"),
                 "parser": parse_stat,
+                "parser_kwargs": {"format": "gnu"},
             },
         },
     }
@@ -51,6 +58,7 @@ COMMAND_SPEC: dict[str, dict[str, Any]] = {
         },
         "whoami": {
             "template": ("whoami",),
+            "parser": strip_only,
         },
     }
 }

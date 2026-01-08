@@ -192,11 +192,12 @@ def process_command_result(
 
     :param dict[str, Any] cmd_completed: Completed command dict
         with 'result' key containing rc, stdout, stderr, plus
-        optional 'parser' and 'validator' callables
+        optional 'parser', 'validator', and 'parser_kwargs' from spec
     :param Optional[list[int]] non_error_codes: Return codes
         considered non-error. Defaults to [0]
     :param Optional[dict[str, Any]] parser_args: Additional keyword
-        arguments to pass to the parser function
+        arguments to pass to the parser function (overrides
+        parser_kwargs from spec)
     :returns tuple[Optional[str], Optional[list]]:
         parsed_output and errors
     :raises TypeError: If cmd_completed or result is not a dict
@@ -257,11 +258,21 @@ def process_command_result(
     else:
         if not isinstance(parser, Callable):
             raise TypeError(f"{e_prefix}Parser is not callable")
+
+        # Merge spec parser_kwargs with runtime parser_args
+        spec_kwargs = cmd_completed.get("parser_kwargs", {})
+        if spec_kwargs and not isinstance(spec_kwargs, dict):
+            raise TypeError(f"{e_prefix}parser_kwargs is not a dict")
         if parser_args:
             if not isinstance(parser_args, dict):
                 raise TypeError(f"{e_prefix}parser_args is not a dict")
+            merged_kwargs = {**spec_kwargs, **parser_args}
+        else:
+            merged_kwargs = spec_kwargs
+
+        if merged_kwargs:
             parsed_output, parse_errors = parser(
-                rc, output, e_prefix, **parser_args
+                rc, output, e_prefix, **merged_kwargs
             )
         else:
             parsed_output, parse_errors = parser(rc, output, e_prefix)
