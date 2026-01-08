@@ -28,6 +28,7 @@ from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
 from ansible_collections.o0_o.core.plugins.module_utils.command_utils import (
     display_longest_command,
     format_error_message,
+    process_all_command_results,
     process_command_result,
     process_command_spec,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "LOCALHOST_NAMES",
     "display_longest_command",
     "format_error_message",
+    "process_all_command_results",
     "process_command_result",
     "process_command_spec",
 ]
