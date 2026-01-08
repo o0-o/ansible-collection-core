@@ -18,6 +18,8 @@ Each specification includes:
 - parser (optional): Callable to parse stdout
 - parser_kwargs (optional): Default keyword arguments for parser
 - validator (optional): Callable to validate parsed output
+- non_error_codes (optional): List of acceptable return codes,
+  defaults to [0]
 
 If no parser is specified, stdout is returned as-is.
 

@@ -181,7 +181,6 @@ def process_command_spec(
 @typechecked
 def process_command_result(
     cmd_completed: dict[str, Any],
-    non_error_codes: Optional[list[int]] = None,
     parser_args: Optional[dict[str, Any]] = None,
 ) -> tuple[Optional[str], Optional[list]]:
     """Process command result: validate, parse, and validate output.
@@ -192,9 +191,8 @@ def process_command_result(
 
     :param dict[str, Any] cmd_completed: Completed command dict
         with 'result' key containing rc, stdout, stderr, plus
-        optional 'parser', 'validator', and 'parser_kwargs' from spec
-    :param Optional[list[int]] non_error_codes: Return codes
-        considered non-error. Defaults to [0]
+        optional 'parser', 'validator', 'parser_kwargs', and
+        'non_error_codes' from spec
     :param Optional[dict[str, Any]] parser_args: Additional keyword
         arguments to pass to the parser function (overrides
         parser_kwargs from spec)
@@ -203,13 +201,15 @@ def process_command_result(
     :raises TypeError: If cmd_completed or result is not a dict
     :raises ValueError: If required fields are missing or malformed
     """
-    if non_error_codes is None:
-        non_error_codes = [0]
-
     if not isinstance(cmd_completed, dict):
         raise TypeError("Completed command not a dict")
 
     e_prefix = _get_command_error_prefix(cmd_completed)
+
+    # Get non_error_codes from spec, default to [0]
+    non_error_codes = cmd_completed.get("non_error_codes", [0])
+    if not isinstance(non_error_codes, list):
+        raise TypeError(f"{e_prefix}non_error_codes is not a list")
 
     cmd_result = cmd_completed.get("result")
     if not isinstance(cmd_result, dict):
@@ -294,7 +294,6 @@ def process_command_result(
 @typechecked
 def process_all_command_results(
     commands: Union[list[dict[str, Any]], dict[str, dict[str, Any]]],
-    non_error_codes: Optional[list[int]] = None,
     parser_args: Optional[dict[str, Any]] = None,
 ) -> tuple[
     Union[list[Optional[str]], dict[str, Optional[str]]],
@@ -308,9 +307,8 @@ def process_all_command_results(
 
     :param Union[list, dict] commands: List or dict of completed
         command dicts, each with 'result' key containing rc, stdout,
-        stderr, plus optional 'parser' and 'validator' callables
-    :param Optional[list[int]] non_error_codes: Return codes
-        considered non-error. Defaults to [0]
+        stderr, plus optional 'parser', 'validator', 'parser_kwargs',
+        and 'non_error_codes' from spec
     :param Optional[dict[str, Any]] parser_args: Additional keyword
         arguments to pass to parser functions
     :returns tuple: (parsed_outputs, errors) in matching format:
@@ -322,11 +320,7 @@ def process_all_command_results(
         parsed_outputs: dict[str, Optional[str]] = {}
         all_errors: dict[str, Optional[list]] = {}
         for key, cmd in commands.items():
-            parsed, errors = process_command_result(
-                cmd,
-                non_error_codes=non_error_codes,
-                parser_args=parser_args,
-            )
+            parsed, errors = process_command_result(cmd, parser_args)
             parsed_outputs[key] = parsed
             all_errors[key] = errors
         return parsed_outputs, all_errors
@@ -334,11 +328,7 @@ def process_all_command_results(
         parsed_list: list[Optional[str]] = []
         errors_list: list[Optional[list]] = []
         for cmd in commands:
-            parsed, errors = process_command_result(
-                cmd,
-                non_error_codes=non_error_codes,
-                parser_args=parser_args,
-            )
+            parsed, errors = process_command_result(cmd, parser_args)
             parsed_list.append(parsed)
             errors_list.append(errors)
         return parsed_list, errors_list
