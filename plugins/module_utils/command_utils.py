@@ -160,8 +160,8 @@ def process_command_spec(
                 raise TypeError(
                     f"{e_prefix}Template is not a string or iterable"
                 )
-            cmd_request["name"] = (
-                cmd_request.get("name") or cmd_default_name
+            cmd_request["lookup"] = (
+                cmd_request.get("lookup") or cmd_default_name
             )
             results.append(cmd_request)
             if implementation_name == "gnu":
@@ -182,7 +182,7 @@ def process_command_spec(
 def process_command_result(
     cmd_completed: dict[str, Any],
     parser_args: Optional[dict[str, Any]] = None,
-) -> tuple[Optional[str], Optional[list]]:
+) -> tuple[Optional[Any], Optional[list]]:
     """Process command result: validate, parse, and validate output.
 
     Extracts stdout from the command result, optionally runs a
@@ -190,13 +190,13 @@ def process_command_result(
     or errors.
 
     :param dict[str, Any] cmd_completed: Completed command dict
-        with 'result' key containing rc, stdout, stderr, plus
-        optional 'parser', 'validator', 'parser_kwargs', and
+        with rc, stdout, stderr fields directly (flat structure),
+        plus optional 'parser', 'validator', 'parser_kwargs', and
         'non_error_codes' from spec
     :param Optional[dict[str, Any]] parser_args: Additional keyword
         arguments to pass to the parser function (overrides
         parser_kwargs from spec)
-    :returns tuple[Optional[str], Optional[list]]:
+    :returns tuple[Optional[Any], Optional[list]]:
         parsed_output and errors
     :raises TypeError: If cmd_completed or result is not a dict
     :raises ValueError: If required fields are missing or malformed
@@ -213,12 +213,8 @@ def process_command_result(
     ):
         raise TypeError(f"{e_prefix}non_error_codes is not a collection")
 
-    cmd_result = cmd_completed.get("result")
-    if not isinstance(cmd_result, dict):
-        raise TypeError(f"{e_prefix}Command result is not a dict")
-
-    # Required fields
-    rc = cmd_result.get("rc")
+    # Required fields - accessed directly from cmd_completed (flat structure)
+    rc = cmd_completed.get("rc")
     if rc is None:
         raise ValueError(f"{e_prefix}Command result is missing 'rc'")
     try:
@@ -227,7 +223,7 @@ def process_command_result(
         raise ValueError(
             f"{e_prefix}Command result 'rc' is not convertible to int"
         ) from e
-    output = cmd_result.get("stdout")
+    output = cmd_completed.get("stdout")
     if output is None:
         raise ValueError(f"{e_prefix}Command result is missing 'stdout'")
     if not isinstance(output, str):
@@ -235,15 +231,15 @@ def process_command_result(
     output = output.rstrip("\n").replace("\r", "")
 
     # Optional but validated if present
-    if "stderr" in cmd_result:
-        if not isinstance(cmd_result["stderr"], str):
+    if "stderr" in cmd_completed:
+        if not isinstance(cmd_completed["stderr"], str):
             raise ValueError(
                 f"{e_prefix}Command result 'stderr' is not str"
             )
 
     # Check return code
     if rc not in non_error_codes:
-        stderr = cmd_result.get("stderr", "").strip() or "No stderr"
+        stderr = cmd_completed.get("stderr", "").strip() or "No stderr"
         return (
             None,
             [
@@ -298,7 +294,7 @@ def process_all_command_results(
     commands: Union[list[dict[str, Any]], dict[str, dict[str, Any]]],
     parser_args: Optional[dict[str, Any]] = None,
 ) -> tuple[
-    Union[list[Optional[str]], dict[str, Optional[str]]],
+    Union[list[Optional[Any]], dict[str, Optional[Any]]],
     Union[list[Optional[list]], dict[str, Optional[list]]],
 ]:
     """Process multiple command results, return parsed outputs/errors.

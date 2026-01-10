@@ -77,9 +77,8 @@ class ActionModule(CoreActionBase, ActionBase):
             task_vars=task_vars,
         )
 
-        # Add result to request dict to create cmd_completed
-        cmd_completed = cmd_request.copy()
-        cmd_completed["result"] = cmd_result
+        # Merge result directly into request dict (flat structure)
+        cmd_completed = {**cmd_request, **cmd_result}
 
         # Process the completed command
         output, errors = process_command_result(cmd_completed)
