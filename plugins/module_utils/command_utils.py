@@ -291,49 +291,49 @@ def process_command_result(
 
 @typechecked
 def process_all_command_results(
-    commands: Union[list[dict[str, Any]], dict[str, dict[str, Any]]],
+    cmds_completed: list[dict[str, Any]],
     parser_args: Optional[dict[str, Any]] = None,
-) -> tuple[
-    Union[list[Optional[Any]], dict[str, Optional[Any]]],
-    Union[list[Optional[list]], dict[str, Optional[list]]],
-]:
-    """Process multiple command results, return parsed outputs/errors.
+) -> dict[str, list[dict[str, Any]]]:
+    """Process multiple command results, return dict keyed by type.
 
-    Iterates through a list or dict of completed command objects,
-    calling process_command_result on each. Returns results in the
-    same format as the input (list or dict).
+    Iterates through a list of completed command objects, calling
+    process_command_result on each. Groups results by command type.
 
-    :param Union[list, dict] commands: List or dict of completed
-        command dicts, each with 'result' key containing rc, stdout,
-        stderr, plus optional 'parser', 'validator', 'parser_kwargs',
-        and 'non_error_codes' from spec
+    :param list[dict[str, Any]] cmds_completed: List of completed
+        command dicts, each with rc, stdout, stderr fields plus 'type'
+        and 'implementation' keys, and optional 'parser', 'validator',
+        'parser_kwargs', and 'non_error_codes' from spec
     :param Optional[dict[str, Any]] parser_args: Additional keyword
         arguments to pass to parser functions
-    :returns tuple: (parsed_outputs, errors) in matching format:
-        list input -> (list[parsed], list[errors])
-        dict input -> (dict[key, parsed], dict[key, errors])
-    :raises TypeError: If commands is not a list or dict
+    :returns dict[str, list[dict[str, Any]]]: Results keyed by type,
+        each containing a list of dicts with 'implementation',
+        'parsed', and 'errors' keys
+    :raises ValueError: If a command is missing 'type' or
+        'implementation'
     """
-    if isinstance(commands, dict):
-        parsed_outputs = {}
-        all_errors = {}
-        for key, cmd in commands.items():
-            parsed, errors = process_command_result(cmd, parser_args)
-            parsed_outputs[key] = parsed
-            all_errors[key] = errors
-        return parsed_outputs, all_errors
-    elif isinstance(commands, list):
-        parsed_list = []
-        errors_list = []
-        for cmd in commands:
-            parsed, errors = process_command_result(cmd, parser_args)
-            parsed_list.append(parsed)
-            errors_list.append(errors)
-        return parsed_list, errors_list
-    else:
-        raise TypeError(
-            f"commands must be a list or dict, got {type(commands).__name__}"
-        )
+    results = {}
+
+    for cmd in cmds_completed:
+        cmd_type = cmd.get("type")
+        if not cmd_type:
+            raise ValueError("Command is missing 'type'")
+
+        implementation = cmd.get("implementation")
+        if not implementation:
+            raise ValueError("Command is missing 'implementation'")
+
+        parsed, errors = process_command_result(cmd, parser_args)
+
+        if cmd_type not in results:
+            results[cmd_type] = []
+
+        results[cmd_type].append({
+            "implementation": implementation,
+            "parsed": parsed,
+            "errors": errors,
+        })
+
+    return results
 
 
 @typechecked

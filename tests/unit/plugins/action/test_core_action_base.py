@@ -21,6 +21,7 @@ from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
 )
 from ansible_collections.o0_o.core.plugins.module_utils.command_utils import (
     _get_command_error_prefix,
+    process_all_command_results,
     process_command_result,
     process_command_spec,
 )
@@ -271,6 +272,125 @@ class TestProcessCommandResult:
         }
         with pytest.raises(TypeError, match="Validator is not callable"):
             process_command_result(cmd_completed)
+
+
+class TestProcessAllCommandResults:
+    """Tests for process_all_command_results function."""
+
+    def test_single_command_single_type(self) -> None:
+        """Test processing single command returns dict keyed by type."""
+        commands = [
+            {
+                "implementation": "core",
+                "type": "whoami",
+                "rc": 0,
+                "stdout": "testuser\n",
+                "stderr": "",
+            }
+        ]
+        results = process_all_command_results(commands)
+        assert "whoami" in results
+        assert len(results["whoami"]) == 1
+        assert results["whoami"][0]["implementation"] == "core"
+        assert results["whoami"][0]["parsed"] == "testuser"
+        assert results["whoami"][0]["errors"] is None
+
+    def test_multiple_implementations_same_type(self) -> None:
+        """Test multiple implementations of same type grouped together."""
+        commands = [
+            {
+                "implementation": "gnu",
+                "type": "stat",
+                "rc": 0,
+                "stdout": "gnu output",
+                "stderr": "",
+            },
+            {
+                "implementation": "bsd",
+                "type": "stat",
+                "rc": 0,
+                "stdout": "bsd output",
+                "stderr": "",
+            },
+        ]
+        results = process_all_command_results(commands)
+        assert "stat" in results
+        assert len(results["stat"]) == 2
+        assert results["stat"][0]["implementation"] == "gnu"
+        assert results["stat"][0]["parsed"] == "gnu output"
+        assert results["stat"][1]["implementation"] == "bsd"
+        assert results["stat"][1]["parsed"] == "bsd output"
+
+    def test_multiple_types(self) -> None:
+        """Test multiple command types are separated correctly."""
+        commands = [
+            {
+                "implementation": "core",
+                "type": "whoami",
+                "rc": 0,
+                "stdout": "root",
+                "stderr": "",
+            },
+            {
+                "implementation": "gnu",
+                "type": "stat",
+                "rc": 0,
+                "stdout": "file info",
+                "stderr": "",
+            },
+        ]
+        results = process_all_command_results(commands)
+        assert "whoami" in results
+        assert "stat" in results
+        assert len(results["whoami"]) == 1
+        assert len(results["stat"]) == 1
+
+    def test_failed_command_has_errors(self) -> None:
+        """Test failed command populates errors field."""
+        commands = [
+            {
+                "implementation": "bsd",
+                "type": "stat",
+                "rc": 1,
+                "stdout": "",
+                "stderr": "file not found",
+            }
+        ]
+        results = process_all_command_results(commands)
+        assert results["stat"][0]["parsed"] is None
+        assert results["stat"][0]["errors"] is not None
+        assert len(results["stat"][0]["errors"]) == 1
+
+    def test_empty_list(self) -> None:
+        """Test empty list returns empty dict."""
+        results = process_all_command_results([])
+        assert results == {}
+
+    def test_missing_type_raises(self) -> None:
+        """Test ValueError raised when type is missing."""
+        commands = [
+            {
+                "implementation": "core",
+                "rc": 0,
+                "stdout": "output",
+                "stderr": "",
+            }
+        ]
+        with pytest.raises(ValueError, match="missing 'type'"):
+            process_all_command_results(commands)
+
+    def test_missing_implementation_raises(self) -> None:
+        """Test ValueError raised when implementation is missing."""
+        commands = [
+            {
+                "type": "whoami",
+                "rc": 0,
+                "stdout": "output",
+                "stderr": "",
+            }
+        ]
+        with pytest.raises(ValueError, match="missing 'implementation'"):
+            process_all_command_results(commands)
 
 
 class TestProcessCommandSpec:
