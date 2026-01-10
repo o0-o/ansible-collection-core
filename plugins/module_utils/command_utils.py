@@ -75,35 +75,22 @@ def process_command_spec(
     spec: dict[str, dict[str, Any]],
     cmd_type: Optional[str] = None,
     **cmd_kwargs: str,
-) -> dict[str, dict[str, Any]]:
-    """Process command spec and return dict of command requests.
+) -> list[dict[str, Any]]:
+    """Process command spec and return list of command requests.
 
     Looks up cmd_type in spec across all implementations and builds
     command request dicts with formatted templates. If cmd_type is
     None, processes all command types in the spec.
 
-    Returns dict keyed by "{implementation}_{type}" for integration
-    with run module::
-
-        spec = process_command_spec(COMMAND_SPEC)
-        # Extract commands for run module
-        cmds = {k: v["command"] for k, v in spec.items()}
-        results = self._run(cmds, ...)
-        # Merge results back for parsing
-        completed = {k: {**spec[k], "result": v} for k, v in
-                     results.items()}
-        parsed, errors = process_all_command_results(completed)
-
     :param dict[str, dict[str, Any]] spec: Command specification dict
     :param Optional[str] cmd_type: Command type to look up, or None
         to process all types
     :param **cmd_kwargs: Format arguments for command template
-    :returns dict[str, dict[str, Any]]: Dict keyed by
-        "{implementation}_{type}" containing command metadata
+    :returns list[dict[str, Any]]: List of command request dicts
     :raises TypeError: If spec structure is malformed
     :raises ValueError: If template is missing or empty
     """
-    results: dict[str, dict[str, Any]] = {}
+    results: list[dict[str, Any]] = []
 
     if not isinstance(spec, dict):
         raise TypeError("COMMAND_SPEC is not a dict")
@@ -176,8 +163,7 @@ def process_command_spec(
             cmd_request["name"] = (
                 cmd_request.get("name") or cmd_default_name
             )
-            key = f"{implementation_name}_{type_name}"
-            results[key] = cmd_request
+            results.append(cmd_request)
             if implementation_name == "gnu":
                 # gnu commands may be prefixed with 'g'
                 alt_gnu_request = cmd_request.copy()
@@ -187,7 +173,7 @@ def process_command_spec(
                 else:
                     alt_gnu_cmd = (f"g{cmd[0].strip()}", *cmd[1:])
                 alt_gnu_request["command"] = alt_gnu_cmd
-                results[f"gnu2_{type_name}"] = alt_gnu_request
+                results.append(alt_gnu_request)
 
     return results
 
