@@ -90,7 +90,7 @@ def process_command_spec(
     :raises TypeError: If spec structure is malformed
     :raises ValueError: If template is missing or empty
     """
-    results: list[dict[str, Any]] = []
+    results = []
 
     if not isinstance(spec, dict):
         raise TypeError("COMMAND_SPEC is not a dict")
@@ -319,16 +319,16 @@ def process_all_command_results(
     :raises TypeError: If commands is not a list or dict
     """
     if isinstance(commands, dict):
-        parsed_outputs: dict[str, Optional[str]] = {}
-        all_errors: dict[str, Optional[list]] = {}
+        parsed_outputs = {}
+        all_errors = {}
         for key, cmd in commands.items():
             parsed, errors = process_command_result(cmd, parser_args)
             parsed_outputs[key] = parsed
             all_errors[key] = errors
         return parsed_outputs, all_errors
     elif isinstance(commands, list):
-        parsed_list: list[Optional[str]] = []
-        errors_list: list[Optional[list]] = []
+        parsed_list = []
+        errors_list = []
         for cmd in commands:
             parsed, errors = process_command_result(cmd, parser_args)
             parsed_list.append(parsed)
@@ -411,7 +411,7 @@ def format_error_message(
 
     total = len(error_list)
 
-    def format_single(err: Union[Exception, str]) -> str:
+    def format_single(err):
         """Format a single error with type name if applicable."""
         if isinstance(err, Exception):
             return f"{type(err).__name__}: {err}"
