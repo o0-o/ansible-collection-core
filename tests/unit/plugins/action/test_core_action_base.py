@@ -145,7 +145,7 @@ class TestProcessCommandResult:
         assert "No stderr" in str(errors[0])
 
     def test_custom_non_error_codes(self) -> None:
-        """Test processing with custom non-error return codes in spec."""
+        """Test processing with custom non-error return codes."""
         cmd_completed = {
             "implementation": "core",
             "type": "test",
@@ -296,7 +296,7 @@ class TestProcessAllCommandResults:
         assert results["whoami"][0]["errors"] is None
 
     def test_multiple_implementations_same_type(self) -> None:
-        """Test multiple implementations of same type grouped together."""
+        """Test multiple implementations of same type are grouped."""
         commands = [
             {
                 "implementation": "gnu",

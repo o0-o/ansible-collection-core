@@ -222,15 +222,11 @@ class LookupModule(LookupBase):
         )
 
         if not conn_type:
-            conn_type = (
-                "local" if target_host in LOCALHOST_NAMES else "ssh"
-            )
+            conn_type = "local" if target_host in LOCALHOST_NAMES else "ssh"
 
         return conn_type
 
-    def run(
-        self, terms: list[Any], **kwargs: Any
-    ) -> Union[list[str], str]:
+    def run(self, terms: list[Any], **kwargs: Any) -> Union[list[str], str]:
         """Determine platform from ansible_connection.
 
         Accesses variables directly via self._templar rather than
@@ -282,9 +278,7 @@ class LookupModule(LookupBase):
         if group:
             hosts_in_group = inventory_groups.get(group, [])
             if not hosts_in_group:
-                raise AnsibleLookupError(
-                    f"Group '{group}' not found or empty"
-                )
+                raise AnsibleLookupError(f"Group '{group}' not found or empty")
             target_hosts.update(hosts_in_group)
 
         if groups:

@@ -41,6 +41,7 @@ from __future__ import annotations
 from collections.abc import Callable, Collection, Iterable
 from typing import Any, Optional, Union
 
+from ansible_collections.o0_o.utils.plugins.module_utils import items2dict
 from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import (  # noqa: E501
     typechecked,
 )
@@ -125,8 +126,7 @@ def process_command_spec(
             cmd_template = cmd_request.pop("command", None)
             if cmd_template is None:
                 raise ValueError(
-                    f"{e_prefix}Command specification is missing a "
-                    "command"
+                    f"{e_prefix}Command specification is missing a " "command"
                 )
             if isinstance(cmd_template, str):
                 cmd_str = cmd_template.format(**cmd_kwargs).strip()
@@ -136,19 +136,14 @@ def process_command_spec(
                 cmd_default_name = cmd_str.split()[0]
             elif isinstance(cmd_template, Iterable):
                 cmd_tuple = tuple(
-                    (
-                        arg.format(**cmd_kwargs)
-                        if isinstance(arg, str)
-                        else arg
-                    )
+                    (arg.format(**cmd_kwargs) if isinstance(arg, str) else arg)
                     for arg in cmd_template
                 )
                 if not cmd_tuple:
                     raise ValueError(f"{e_prefix}Command is empty")
                 if not isinstance(cmd_tuple[0], str):
                     raise TypeError(
-                        f"{e_prefix}Command (without args) is not a "
-                        "string"
+                        f"{e_prefix}Command (without args) is not a " "string"
                     )
                 if cmd_tuple[0] == "":
                     raise ValueError(
@@ -213,7 +208,7 @@ def process_command_result(
     ):
         raise TypeError(f"{e_prefix}non_error_codes is not a collection")
 
-    # Required fields - accessed directly from cmd_completed (flat structure)
+    # Required fields - directly on cmd_completed (flat structure)
     rc = cmd_completed.get("rc")
     if rc is None:
         raise ValueError(f"{e_prefix}Command result is missing 'rc'")
@@ -233,9 +228,7 @@ def process_command_result(
     # Optional but validated if present
     if "stderr" in cmd_completed:
         if not isinstance(cmd_completed["stderr"], str):
-            raise ValueError(
-                f"{e_prefix}Command result 'stderr' is not str"
-            )
+            raise ValueError(f"{e_prefix}Command result 'stderr' is not str")
 
     # Check return code
     if rc not in non_error_codes:
@@ -297,7 +290,8 @@ def process_all_command_results(
     """Process multiple command results, return dict keyed by type.
 
     Iterates through a list of completed command objects, calling
-    process_command_result on each. Groups results by command type.
+    process_command_result on each. Groups results by command type
+    using items2dict with collision='list'.
 
     :param list[dict[str, Any]] cmds_completed: List of completed
         command dicts, each with rc, stdout, stderr fields plus 'type'
@@ -311,7 +305,7 @@ def process_all_command_results(
     :raises ValueError: If a command is missing 'type' or
         'implementation'
     """
-    results = {}
+    processed = []
 
     for cmd in cmds_completed:
         cmd_type = cmd.get("type")
@@ -324,16 +318,18 @@ def process_all_command_results(
 
         parsed, errors = process_command_result(cmd, parser_args)
 
-        if cmd_type not in results:
-            results[cmd_type] = []
+        processed.append(
+            {
+                "type": cmd_type,
+                "implementation": implementation,
+                "parsed": parsed,
+                "errors": errors,
+            }
+        )
 
-        results[cmd_type].append({
-            "implementation": implementation,
-            "parsed": parsed,
-            "errors": errors,
-        })
-
-    return results
+    return items2dict(
+        processed, key_name="type", value_name=None, collision="list"
+    )
 
 
 @typechecked
