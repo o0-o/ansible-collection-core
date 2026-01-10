@@ -11,10 +11,11 @@
 
 """Command specifications for cross-platform command execution.
 
-This module defines command templates organized by implementation type.
+This module defines commands organized by implementation type.
 Each specification includes:
 
-- template (required): Command as string or tuple of arguments
+- command (required): Command as string or tuple of arguments.
+  Supports {placeholder} substitution via format().
 - parser (optional): Callable to parse stdout
 - parser_kwargs (optional): Default keyword arguments for parser
 - validator (optional): Callable to validate parsed output
@@ -34,13 +35,13 @@ Subclasses in other collections can extend COMMAND_SPEC by merging::
         **CORE_COMMAND_SPEC,
         "posix": {
             "lookup_stat": {
-                "template": ("command", "-v", "stat"),
+                "command": ("command", "-v", "stat"),
                 "non_error_codes": (0, 1),
                 "parser": parse_command_lookup,
                 "parser_kwargs": {"commands_requested": ["stat"]},
             },
             "list_path": {
-                "template": ("ls", "-d", "{path}"),
+                "command": ("ls", "-d", "{path}"),
                 "parser": parse_ls,
                 "validator": validate_ls,
             },
@@ -60,12 +61,12 @@ from ansible_collections.o0_o.core.plugins.module_utils.parsers import (
 COMMAND_SPEC: dict[str, dict[str, Any]] = {
     "core": {
         "hello_world": {
-            "template": ("echo", "Hello, world!"),
+            "command": ("echo", "Hello, world!"),
             "parser": strip_only,
             "validator": validate_hello_world,
         },
         "whoami": {
-            "template": ("whoami",),
+            "command": ("whoami",),
             "parser": strip_only,
         },
     }

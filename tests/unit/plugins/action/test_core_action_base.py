@@ -301,12 +301,12 @@ class TestProcessCommandSpec:
         requests = process_command_spec(COMMAND_SPEC, "nonexistent")
         assert requests == []
 
-    def test_template_formatting(self) -> None:
-        """Test that templates are properly formatted with kwargs."""
+    def test_command_formatting(self) -> None:
+        """Test that commands are properly formatted with kwargs."""
         custom_spec = {
             "test": {
                 "greet": {
-                    "template": ("echo", "Hello, {name}!"),
+                    "command": ("echo", "Hello, {name}!"),
                 }
             }
         }
@@ -314,12 +314,12 @@ class TestProcessCommandSpec:
         assert len(requests) == 1
         assert requests[0]["command"] == ("echo", "Hello, Alice!")
 
-    def test_string_template(self) -> None:
-        """Test processing string template instead of tuple."""
+    def test_string_command(self) -> None:
+        """Test processing string command instead of tuple."""
         custom_spec = {
             "test": {
                 "cmd": {
-                    "template": "echo hello",
+                    "command": "echo hello",
                 }
             }
         }
@@ -327,22 +327,22 @@ class TestProcessCommandSpec:
         assert len(requests) == 1
         assert requests[0]["command"] == "echo hello"
 
-    def test_missing_template(self) -> None:
-        """Test ValueError raised when template is missing."""
+    def test_missing_command(self) -> None:
+        """Test ValueError raised when command is missing."""
         custom_spec = {
             "test": {
                 "cmd": {},
             }
         }
-        with pytest.raises(ValueError, match="missing a template"):
+        with pytest.raises(ValueError, match="missing a command"):
             process_command_spec(custom_spec, "cmd")
 
-    def test_empty_template(self) -> None:
-        """Test ValueError raised when template is empty."""
+    def test_empty_command(self) -> None:
+        """Test ValueError raised when command is empty."""
         custom_spec = {
             "test": {
                 "cmd": {
-                    "template": (),
+                    "command": (),
                 }
             }
         }

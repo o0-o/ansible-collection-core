@@ -20,7 +20,7 @@ Command Specification Structure:
     {
         "implementation": {
             "cmd_type": {
-                "template": ("command", "arg1", "{placeholder}"),
+                "command": ("cmd", "arg1", "{placeholder}"),
                 "parser": optional_parser_function,
                 "validator": optional_validator_function,
             },
@@ -79,16 +79,16 @@ def process_command_spec(
     """Process command spec and return list of command requests.
 
     Looks up cmd_type in spec across all implementations and builds
-    command request dicts with formatted templates. If cmd_type is
+    command request dicts with formatted commands. If cmd_type is
     None, processes all command types in the spec.
 
     :param dict[str, dict[str, Any]] spec: Command specification dict
     :param Optional[str] cmd_type: Command type to look up, or None
         to process all types
-    :param **cmd_kwargs: Format arguments for command template
+    :param **cmd_kwargs: Format arguments for command placeholders
     :returns list[dict[str, Any]]: List of command request dicts
     :raises TypeError: If spec structure is malformed
-    :raises ValueError: If template is missing or empty
+    :raises ValueError: If command is missing or empty
     """
     results = []
 
@@ -122,26 +122,26 @@ def process_command_spec(
             cmd_request["implementation"] = implementation_name
             cmd_request["type"] = type_name
             e_prefix = _get_command_error_prefix(cmd_request)
-            template = cmd_request.pop("template", None)
-            if template is None:
+            cmd_template = cmd_request.pop("command", None)
+            if cmd_template is None:
                 raise ValueError(
                     f"{e_prefix}Command specification is missing a "
-                    "template"
+                    "command"
                 )
-            if isinstance(template, str):
-                cmd_str = template.format(**cmd_kwargs).strip()
+            if isinstance(cmd_template, str):
+                cmd_str = cmd_template.format(**cmd_kwargs).strip()
                 if not cmd_str:
                     raise ValueError(f"{e_prefix}Command is empty")
                 cmd_request["command"] = cmd_str
                 cmd_default_name = cmd_str.split()[0]
-            elif isinstance(template, Iterable):
+            elif isinstance(cmd_template, Iterable):
                 cmd_tuple = tuple(
                     (
                         arg.format(**cmd_kwargs)
                         if isinstance(arg, str)
                         else arg
                     )
-                    for arg in template
+                    for arg in cmd_template
                 )
                 if not cmd_tuple:
                     raise ValueError(f"{e_prefix}Command is empty")
@@ -158,7 +158,7 @@ def process_command_spec(
                 cmd_default_name = cmd_tuple[0].strip()
             else:
                 raise TypeError(
-                    f"{e_prefix}Template is not a string or iterable"
+                    f"{e_prefix}Command is not a string or iterable"
                 )
             cmd_request["lookup"] = (
                 cmd_request.get("lookup") or cmd_default_name
