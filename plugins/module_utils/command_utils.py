@@ -39,9 +39,14 @@ If no parser is specified, stdout is returned as-is.
 from __future__ import annotations
 
 from collections.abc import Callable, Collection, Iterable
+from itertools import product
+from string import Formatter
 from typing import Any, Optional, Union
 
-from ansible_collections.o0_o.utils.plugins.module_utils import items2dict
+from ansible_collections.o0_o.utils.plugins.module_utils import (
+    items2dict,
+    wantlist,
+)
 from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import (  # noqa: E501
     typechecked,
 )
@@ -71,11 +76,67 @@ def _get_command_error_prefix(command_obj: dict[str, Any]) -> str:
     return f"[{cmd_implementation}_{cmd_type}] "
 
 
+def _get_template_placeholders(
+    cmd_template: Union[str, Iterable[Any]],
+) -> set[str]:
+    """Extract placeholder names from a command template.
+
+    Parses format string placeholders like {path} or {name} from either
+    a string command or tuple of command arguments.
+
+    :param Union[str, Iterable[Any]] cmd_template: Command template as
+        string or iterable of arguments
+    :returns set[str]: Set of placeholder field names found
+    """
+    placeholders: set[str] = set()
+    formatter = Formatter()
+
+    if isinstance(cmd_template, str):
+        for _, field_name, _, _ in formatter.parse(cmd_template):
+            if field_name is not None and field_name != "":
+                placeholders.add(field_name)
+    elif isinstance(cmd_template, Iterable):
+        for arg in cmd_template:
+            if isinstance(arg, str):
+                for _, field_name, _, _ in formatter.parse(arg):
+                    if field_name is not None and field_name != "":
+                        placeholders.add(field_name)
+
+    return placeholders
+
+
+@typechecked
+def _expand_kwargs_combinations(
+    cmd_kwargs: dict[str, Union[str, list[str]]],
+) -> list[dict[str, str]]:
+    """Expand kwargs into all combinations using cartesian product.
+
+    Uses wantlist to normalize scalars to single-item lists, then
+    generates cartesian product of all value lists.
+
+    :param dict[str, Union[str, list[str]]] cmd_kwargs: Keyword
+        arguments that may contain list values
+    :returns list[dict[str, str]]: List of kwarg dicts, one per
+        combination. Empty list if any value list is empty.
+    """
+    if not cmd_kwargs:
+        return [{}]
+
+    keys = list(cmd_kwargs.keys())
+    value_lists = [wantlist(cmd_kwargs[k]) for k in keys]
+
+    combinations = []
+    for combo in product(*value_lists):
+        combinations.append(dict(zip(keys, combo)))
+
+    return combinations
+
+
 @typechecked
 def process_command_spec(
     spec: dict[str, dict[str, Any]],
     cmd_type: Optional[str] = None,
-    **cmd_kwargs: str,
+    **cmd_kwargs: Union[str, list[str]],
 ) -> list[dict[str, Any]]:
     """Process command spec and return list of command requests.
 
@@ -83,10 +144,16 @@ def process_command_spec(
     command request dicts with formatted commands. If cmd_type is
     None, processes all command types in the spec.
 
+    If any kwarg value is a list, generates a separate command
+    request for each item. When multiple kwargs are lists, generates
+    the cartesian product (all combinations).
+
     :param dict[str, dict[str, Any]] spec: Command specification dict
     :param Optional[str] cmd_type: Command type to look up, or None
         to process all types
-    :param **cmd_kwargs: Format arguments for command placeholders
+    :param **cmd_kwargs: Format arguments for command placeholders.
+        Scalar values substitute directly; list values generate
+        multiple requests.
     :returns list[dict[str, Any]]: List of command request dicts
     :raises TypeError: If spec structure is malformed
     :raises ValueError: If command is missing or empty
@@ -119,56 +186,77 @@ def process_command_spec(
                     f"[{implementation_name}] Command type {type_name} is "
                     "not a dict"
                 )
-            cmd_request = variant.copy()
-            cmd_request["implementation"] = implementation_name
-            cmd_request["type"] = type_name
-            e_prefix = _get_command_error_prefix(cmd_request)
-            cmd_template = cmd_request.pop("command", None)
+
+            # Get template to determine which kwargs are used
+            cmd_template = variant.get("command")
             if cmd_template is None:
                 raise ValueError(
-                    f"{e_prefix}Command specification is missing a " "command"
+                    f"[{implementation_name}_{type_name}] Command "
+                    "specification is missing a command"
                 )
-            if isinstance(cmd_template, str):
-                cmd_str = cmd_template.format(**cmd_kwargs).strip()
-                if not cmd_str:
-                    raise ValueError(f"{e_prefix}Command is empty")
-                cmd_request["command"] = cmd_str
-                cmd_default_name = cmd_str.split()[0]
-            elif isinstance(cmd_template, Iterable):
-                cmd_tuple = tuple(
-                    (arg.format(**cmd_kwargs) if isinstance(arg, str) else arg)
-                    for arg in cmd_template
-                )
-                if not cmd_tuple:
-                    raise ValueError(f"{e_prefix}Command is empty")
-                if not isinstance(cmd_tuple[0], str):
-                    raise TypeError(
-                        f"{e_prefix}Command (without args) is not a " "string"
+
+            # Filter kwargs to only those used in this template
+            placeholders = _get_template_placeholders(cmd_template)
+            used_kwargs = {
+                k: v for k, v in cmd_kwargs.items() if k in placeholders
+            }
+
+            # Cartesian product of used list kwargs only
+            kwargs_combinations = _expand_kwargs_combinations(used_kwargs)
+
+            for expanded_kwargs in kwargs_combinations:
+                cmd_request = variant.copy()
+                cmd_request["implementation"] = implementation_name
+                cmd_request["type"] = type_name
+                cmd_request["args"] = expanded_kwargs.copy()
+                e_prefix = _get_command_error_prefix(cmd_request)
+                cmd_template = cmd_request.pop("command")
+                if isinstance(cmd_template, str):
+                    cmd_str = cmd_template.format(**expanded_kwargs).strip()
+                    if not cmd_str:
+                        raise ValueError(f"{e_prefix}Command is empty")
+                    cmd_request["command"] = cmd_str
+                    cmd_default_name = cmd_str.split()[0]
+                elif isinstance(cmd_template, Iterable):
+                    cmd_tuple = tuple(
+                        (
+                            arg.format(**expanded_kwargs)
+                            if isinstance(arg, str)
+                            else arg
+                        )
+                        for arg in cmd_template
                     )
-                if cmd_tuple[0] == "":
-                    raise ValueError(
-                        f"{e_prefix}Command (without args) is empty"
-                    )
-                cmd_request["command"] = cmd_tuple
-                cmd_default_name = cmd_tuple[0].strip()
-            else:
-                raise TypeError(
-                    f"{e_prefix}Command is not a string or iterable"
-                )
-            cmd_request["lookup"] = (
-                cmd_request.get("lookup") or cmd_default_name
-            )
-            results.append(cmd_request)
-            if implementation_name == "gnu":
-                # gnu commands may be prefixed with 'g'
-                alt_gnu_request = cmd_request.copy()
-                cmd = alt_gnu_request["command"]
-                if isinstance(cmd, str):
-                    alt_gnu_cmd = f"g{cmd}"
+                    if not cmd_tuple:
+                        raise ValueError(f"{e_prefix}Command is empty")
+                    if not isinstance(cmd_tuple[0], str):
+                        raise TypeError(
+                            f"{e_prefix}Command (without args) is not a "
+                            "string"
+                        )
+                    if cmd_tuple[0] == "":
+                        raise ValueError(
+                            f"{e_prefix}Command (without args) is empty"
+                        )
+                    cmd_request["command"] = cmd_tuple
+                    cmd_default_name = cmd_tuple[0].strip()
                 else:
-                    alt_gnu_cmd = (f"g{cmd[0].strip()}", *cmd[1:])
-                alt_gnu_request["command"] = alt_gnu_cmd
-                results.append(alt_gnu_request)
+                    raise TypeError(
+                        f"{e_prefix}Command is not a string or iterable"
+                    )
+                cmd_request["lookup"] = (
+                    cmd_request.get("lookup") or cmd_default_name
+                )
+                results.append(cmd_request)
+                if implementation_name == "gnu":
+                    # gnu commands may be prefixed with 'g'
+                    alt_gnu_request = cmd_request.copy()
+                    cmd = alt_gnu_request["command"]
+                    if isinstance(cmd, str):
+                        alt_gnu_cmd = f"g{cmd}"
+                    else:
+                        alt_gnu_cmd = (f"g{cmd[0].strip()}", *cmd[1:])
+                    alt_gnu_request["command"] = alt_gnu_cmd
+                    results.append(alt_gnu_request)
 
     return results
 
