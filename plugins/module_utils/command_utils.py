@@ -45,10 +45,8 @@ from typing import Any, Optional, Union
 
 from ansible_collections.o0_o.utils.plugins.module_utils import (
     items2dict,
-    wantlist,
-)
-from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import (  # noqa: E501
     typechecked,
+    wantlist,
 )
 
 
@@ -76,7 +74,7 @@ def _get_command_error_prefix(command_obj: dict[str, Any]) -> str:
     return f"[{cmd_implementation}_{cmd_type}] "
 
 
-def _get_template_placeholders(
+def _get_command_template_placeholders(
     cmd_template: Union[str, Iterable[Any]],
 ) -> set[str]:
     """Extract placeholder names from a command template.
@@ -88,19 +86,15 @@ def _get_template_placeholders(
         string or iterable of arguments
     :returns set[str]: Set of placeholder field names found
     """
-    placeholders: set[str] = set()
+    placeholders = set()
     formatter = Formatter()
 
-    if isinstance(cmd_template, str):
-        for _, field_name, _, _ in formatter.parse(cmd_template):
-            if field_name is not None and field_name != "":
-                placeholders.add(field_name)
-    elif isinstance(cmd_template, Iterable):
-        for arg in cmd_template:
-            if isinstance(arg, str):
-                for _, field_name, _, _ in formatter.parse(arg):
-                    if field_name is not None and field_name != "":
-                        placeholders.add(field_name)
+    cmd_template = wantlist(cmd_template)
+    for arg in cmd_template:
+        if isinstance(arg, str):
+            for _literal, field_name, _spec, _conv in formatter.parse(arg):
+                if field_name is not None and field_name != "":
+                    placeholders.add(field_name)
 
     return placeholders
 
@@ -196,7 +190,7 @@ def process_command_spec(
                 )
 
             # Filter kwargs to only those used in this template
-            placeholders = _get_template_placeholders(cmd_template)
+            placeholders = _get_command_template_placeholders(cmd_template)
             used_kwargs = {
                 k: v for k, v in cmd_kwargs.items() if k in placeholders
             }
@@ -349,12 +343,13 @@ def process_command_result(
         else:
             merged_kwargs = spec_kwargs
 
-        if merged_kwargs:
-            parsed_output, parse_errors = parser(
-                rc, output, e_prefix, **merged_kwargs
-            )
+        # Include rc only when multiple non-error codes are defined
+        if len(non_error_codes) > 1:
+            pos_args = (rc, output, e_prefix)
         else:
-            parsed_output, parse_errors = parser(rc, output, e_prefix)
+            pos_args = (output, e_prefix)
+
+        parsed_output, parse_errors = parser(*pos_args, **merged_kwargs)
         if parse_errors:
             return None, parse_errors
 

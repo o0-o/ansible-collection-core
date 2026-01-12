@@ -38,14 +38,8 @@ class TestStripOnly:
     )
     def test_strip_whitespace(self, input_str: str, expected: str) -> None:
         """Test parser strips leading/trailing whitespace correctly."""
-        output, errors = strip_only(0, input_str, "[test] ")
+        output, errors = strip_only(input_str, "[test] ")
         assert output == expected
-        assert errors is None
-
-    def test_ignores_rc(self) -> None:
-        """Test parser ignores return code."""
-        output, errors = strip_only(1, "hello", "[test] ")
-        assert output == "hello"
         assert errors is None
 
 

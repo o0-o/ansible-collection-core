@@ -19,14 +19,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import (  # noqa: E501
-    typechecked,
-)
+from ansible_collections.o0_o.utils.plugins.module_utils import typechecked
 
 
 @typechecked
 def strip_only(
-    rc: int,
     output: str,
     e_prefix: str,
 ) -> tuple[str, None]:
@@ -34,12 +31,11 @@ def strip_only(
 
     Simple parser that strips leading/trailing whitespace from output.
 
-    :param int rc: Command return code (unused)
     :param str output: Raw command output
     :param str e_prefix: Error prefix for error messages (unused)
     :returns tuple[str, None]: (stripped_output, None)
     """
-    del rc, e_prefix  # unused
+    del e_prefix  # unused
     return output.strip(), None
 
 

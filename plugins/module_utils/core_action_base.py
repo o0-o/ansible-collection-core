@@ -26,9 +26,7 @@ import sys
 from contextlib import contextmanager
 from typing import Any, Generator, Optional, Union
 
-from ansible_collections.o0_o.utils.plugins.module_utils.typeguard_compat import (  # noqa: E501
-    typechecked,
-)
+from ansible_collections.o0_o.utils.plugins.module_utils import typechecked
 
 from ansible_collections.o0_o.core.plugins.module_utils.connection import (
     CONNECTION_BY_PLATFORM,

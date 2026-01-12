@@ -21,7 +21,7 @@ from ansible_collections.o0_o.core.plugins.module_utils.command_spec import (
 )
 from ansible_collections.o0_o.core.plugins.module_utils.command_utils import (
     _get_command_error_prefix,
-    _get_template_placeholders,
+    _get_command_template_placeholders,
     process_all_command_results,
     process_command_result,
     process_command_spec,
@@ -193,7 +193,7 @@ class TestProcessCommandResult:
     def test_with_parser_success(self) -> None:
         """Test processing with parser that succeeds."""
 
-        def parser(rc, output, prefix):
+        def parser(output, prefix):
             return output.upper(), None
 
         cmd_completed = {
@@ -211,7 +211,7 @@ class TestProcessCommandResult:
     def test_with_parser_failure(self) -> None:
         """Test processing with parser that returns errors."""
 
-        def parser(rc, output, prefix):
+        def parser(output, prefix):
             return None, [ValueError("parse error")]
 
         cmd_completed = {
@@ -532,7 +532,7 @@ class TestProcessCommandSpecListExpansion:
         assert len(requests) == 0
 
     def test_kwargs_supplied_but_not_used(self) -> None:
-        """Test args is empty when kwargs supplied but not in template."""
+        """Test args is empty when kwargs not in template."""
         custom_spec = {"test": {"cmd": {"command": ("whoami",)}}}
         requests = process_command_spec(
             custom_spec, "cmd", path="/tmp", mode="644"
@@ -544,18 +544,14 @@ class TestProcessCommandSpecListExpansion:
     def test_single_item_list_like_scalar(self) -> None:
         """Test single-item list behaves like scalar."""
         custom_spec = {"test": {"cmd": {"command": ("echo", "{path}")}}}
-        requests = process_command_spec(
-            custom_spec, "cmd", path=["/tmp/file"]
-        )
+        requests = process_command_spec(custom_spec, "cmd", path=["/tmp/file"])
         assert len(requests) == 1
         assert requests[0]["command"] == ("echo", "/tmp/file")
 
     def test_string_command_with_list(self) -> None:
         """Test list expansion with string command."""
         custom_spec = {"test": {"cmd": {"command": "echo {path}"}}}
-        requests = process_command_spec(
-            custom_spec, "cmd", path=["/a", "/b"]
-        )
+        requests = process_command_spec(custom_spec, "cmd", path=["/a", "/b"])
         assert len(requests) == 2
         assert requests[0]["command"] == "echo /a"
         assert requests[1]["command"] == "echo /b"
@@ -563,9 +559,7 @@ class TestProcessCommandSpecListExpansion:
     def test_gnu_alt_with_list_expansion(self) -> None:
         """Test GNU alternate commands with list expansion."""
         custom_spec = {"gnu": {"cmd": {"command": ("stat", "{path}")}}}
-        requests = process_command_spec(
-            custom_spec, "cmd", path=["/a", "/b"]
-        )
+        requests = process_command_spec(custom_spec, "cmd", path=["/a", "/b"])
         # 2 paths x 2 (stat + gstat) = 4 requests
         assert len(requests) == 4
         commands = [r["command"] for r in requests]
@@ -582,9 +576,7 @@ class TestProcessCommandSpecListExpansion:
                 "no_path": {"command": ("whoami",)},
             }
         }
-        requests = process_command_spec(
-            custom_spec, path=["/a", "/b"]
-        )
+        requests = process_command_spec(custom_spec, path=["/a", "/b"])
         # uses_path: 2 requests (one per path)
         # no_path: 1 request (path kwarg not used)
         assert len(requests) == 3
@@ -641,55 +633,55 @@ class TestProcessCommandSpecListExpansion:
         assert commands.count(("pwd",)) == 1
 
 
-class TestGetTemplatePlaceholders:
-    """Tests for _get_template_placeholders function."""
+class TestGetCommandTemplatePlaceholders:
+    """Tests for _get_command_template_placeholders function."""
 
     def test_string_single_placeholder(self) -> None:
         """Test extracting single placeholder from string."""
-        result = _get_template_placeholders("echo {path}")
+        result = _get_command_template_placeholders("echo {path}")
         assert result == {"path"}
 
     def test_string_multiple_placeholders(self) -> None:
         """Test extracting multiple placeholders from string."""
-        result = _get_template_placeholders("cp {src} {dest}")
+        result = _get_command_template_placeholders("cp {src} {dest}")
         assert result == {"src", "dest"}
 
     def test_string_no_placeholders(self) -> None:
         """Test string with no placeholders."""
-        result = _get_template_placeholders("whoami")
+        result = _get_command_template_placeholders("whoami")
         assert result == set()
 
     def test_tuple_single_placeholder(self) -> None:
         """Test extracting placeholder from tuple command."""
-        result = _get_template_placeholders(("stat", "{path}"))
+        result = _get_command_template_placeholders(("stat", "{path}"))
         assert result == {"path"}
 
     def test_tuple_multiple_placeholders(self) -> None:
-        """Test extracting placeholders from tuple with multiple args."""
-        result = _get_template_placeholders(("cp", "{src}", "{dest}"))
+        """Test extracting multiple placeholders from tuple."""
+        result = _get_command_template_placeholders(("cp", "{src}", "{dest}"))
         assert result == {"src", "dest"}
 
     def test_tuple_no_placeholders(self) -> None:
         """Test tuple with no placeholders."""
-        result = _get_template_placeholders(("whoami",))
+        result = _get_command_template_placeholders(("whoami",))
         assert result == set()
 
     def test_tuple_mixed_placeholders(self) -> None:
         """Test tuple with mix of placeholder and literal args."""
-        result = _get_template_placeholders(("chmod", "644", "{path}"))
+        result = _get_command_template_placeholders(("chmod", "644", "{path}"))
         assert result == {"path"}
 
     def test_repeated_placeholder(self) -> None:
         """Test that repeated placeholders are deduplicated."""
-        result = _get_template_placeholders("echo {x} {x} {x}")
+        result = _get_command_template_placeholders("echo {x} {x} {x}")
         assert result == {"x"}
 
     def test_empty_string(self) -> None:
         """Test empty string returns empty set."""
-        result = _get_template_placeholders("")
+        result = _get_command_template_placeholders("")
         assert result == set()
 
     def test_empty_tuple(self) -> None:
         """Test empty tuple returns empty set."""
-        result = _get_template_placeholders(())
+        result = _get_command_template_placeholders(())
         assert result == set()
