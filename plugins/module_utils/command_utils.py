@@ -44,32 +44,33 @@ from string import Formatter
 from typing import Any, Optional, Union
 
 from ansible_collections.o0_o.utils.plugins.module_utils import (
-    items2dict,
     typechecked,
     wantlist,
 )
 
 
 @typechecked
-def _get_command_error_prefix(command_obj: dict[str, Any]) -> str:
+def _get_command_error_prefix(cmd_obj: dict[str, Any]) -> str:
     """Build error prefix string from command object metadata.
 
-    :param dict[str, Any] command_obj: Command object with
+    :param dict[str, Any] cmd_obj: Command object with
         implementation and type keys
     :returns str: Error prefix in format '[implementation_type] '
-    :raises TypeError: If command_obj is not a dict
+    :raises TypeError: If cmd_obj is not a dict
     :raises ValueError: If required keys are missing
     """
-    if not isinstance(command_obj, dict):
-        raise TypeError("Command object is not a dict")
+    if not isinstance(cmd_obj, dict):
+        raise TypeError(f"Command object is not a dict: {repr(cmd_obj)}")
 
-    cmd_implementation = command_obj.get("implementation")
+    cmd_implementation = cmd_obj.get("implementation")
     if not cmd_implementation:
-        raise ValueError("Command object is missing implementation")
+        raise ValueError(
+            f"Command object is missing implementation: {repr(cmd_obj)}"
+        )
 
-    cmd_type = command_obj.get("type")
+    cmd_type = cmd_obj.get("type")
     if not cmd_type:
-        raise ValueError("Command object is missing type")
+        raise ValueError(f"Command object is missing type: {repr(cmd_obj)}")
 
     return f"[{cmd_implementation}_{cmd_type}] "
 
@@ -259,7 +260,7 @@ def process_command_spec(
 def process_command_result(
     cmd_completed: dict[str, Any],
     parser_args: Optional[dict[str, Any]] = None,
-) -> tuple[Optional[Any], Optional[list]]:
+) -> dict[str, Any]:
     """Process command result: validate, parse, and validate output.
 
     Extracts stdout from the command result, optionally runs a
@@ -273,11 +274,13 @@ def process_command_result(
     :param Optional[dict[str, Any]] parser_args: Additional keyword
         arguments to pass to the parser function (overrides
         parser_kwargs from spec)
-    :returns tuple[Optional[Any], Optional[list]]:
-        parsed_output and errors
+    :returns dict[str, Any]: Dict with 'parsed' (output or None) and
+        'errors' (list of exceptions, may be empty)
     :raises TypeError: If cmd_completed or result is not a dict
     :raises ValueError: If required fields are missing or malformed
     """
+    result = {"parsed": None, "errors": []}
+
     if not isinstance(cmd_completed, dict):
         raise TypeError("Completed command not a dict")
 
@@ -315,19 +318,16 @@ def process_command_result(
     # Check return code
     if rc not in non_error_codes:
         stderr = cmd_completed.get("stderr", "").strip() or "No stderr"
-        return (
-            None,
-            [
-                RuntimeError(
-                    f"{e_prefix}command exited with code {rc}: {stderr}"
-                )
-            ],
+        result["errors"].append(
+            RuntimeError(f"{e_prefix}command exited with code {rc}: {stderr}")
         )
+        return result
 
     # Parse output (optional - defaults to pass-through)
     parser = cmd_completed.get("parser")
+    errors = None
     if parser is None:
-        parsed_output = output
+        parsed = output
     else:
         if not isinstance(parser, Callable):
             raise TypeError(f"{e_prefix}Parser is not callable")
@@ -349,32 +349,35 @@ def process_command_result(
         else:
             pos_args = (output, e_prefix)
 
-        parsed_output, parse_errors = parser(*pos_args, **merged_kwargs)
-        if parse_errors:
-            return None, parse_errors
+        parsed, errors = parser(*pos_args, **merged_kwargs)
+
+    result["parsed"] = parsed
+    if errors is not None:
+        result["errors"].extend(errors)
 
     # Validate output (optional)
     validator = cmd_completed.get("validator")
     if validator is not None:
         if not isinstance(validator, Callable):
             raise TypeError(f"{e_prefix}Validator is not callable")
-        validation_error = validator(parsed_output, e_prefix)
+        validation_error = validator(parsed, e_prefix)
         if validation_error is not None:
-            return None, [validation_error]
+            result["parsed"] = None
+            result["errors"].append(validation_error)
 
-    return parsed_output, None
+    return result
 
 
 @typechecked
 def process_all_command_results(
     cmds_completed: list[dict[str, Any]],
     parser_args: Optional[dict[str, Any]] = None,
-) -> dict[str, list[dict[str, Any]]]:
+) -> dict[str, Any]:
     """Process multiple command results, return dict keyed by type.
 
     Iterates through a list of completed command objects, calling
-    process_command_result on each. Groups results by command type
-    using items2dict with collision='list'.
+    process_command_result on each. Groups results by command type,
+    converting to list on collision.
 
     :param list[dict[str, Any]] cmds_completed: List of completed
         command dicts, each with rc, stdout, stderr fields plus 'type'
@@ -382,37 +385,34 @@ def process_all_command_results(
         'parser_kwargs', and 'non_error_codes' from spec
     :param Optional[dict[str, Any]] parser_args: Additional keyword
         arguments to pass to parser functions
-    :returns dict[str, list[dict[str, Any]]]: Results keyed by type,
-        each containing a list of dicts with 'implementation',
-        'parsed', and 'errors' keys
-    :raises ValueError: If a command is missing 'type' or
-        'implementation'
+    :returns dict[str, Any]: Dict keyed by command type, values are
+        single result dicts or lists of result dicts on collision
+    :raises ValueError: If a command is missing 'type'
     """
-    processed = []
+    processed = {}
 
     for cmd in cmds_completed:
         cmd_type = cmd.get("type")
         if not cmd_type:
             raise ValueError("Command is missing 'type'")
 
-        implementation = cmd.get("implementation")
-        if not implementation:
-            raise ValueError("Command is missing 'implementation'")
+        processed_cmd = process_command_result(cmd, parser_args)
+        processed_cmd.update(cmd)
 
-        parsed, errors = process_command_result(cmd, parser_args)
+        if cmd_type not in processed:
+            processed[cmd_type] = processed_cmd
+        elif isinstance(processed[cmd_type], dict):
+            # Convert to list on first collision
+            processed[cmd_type] = [processed[cmd_type], processed_cmd]
+        elif isinstance(processed[cmd_type], list):
+            processed[cmd_type].append(processed_cmd)
+        else:
+            raise TypeError(
+                f"Unexpected type for processed[{cmd_type!r}]: "
+                f"{type(processed[cmd_type])}"
+            )
 
-        processed.append(
-            {
-                "type": cmd_type,
-                "implementation": implementation,
-                "parsed": parsed,
-                "errors": errors,
-            }
-        )
-
-    return items2dict(
-        processed, key_name="type", value_name=None, collision="list"
-    )
+    return processed
 
 
 @typechecked

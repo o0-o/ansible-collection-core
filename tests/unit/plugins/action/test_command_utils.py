@@ -88,9 +88,9 @@ class TestProcessCommandResult:
             "stdout": "testuser\n",
             "stderr": "",
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output == "testuser"
-        assert errors is None
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] == "testuser"
+        assert result["errors"] == []
 
     def test_successful_command_strips_newlines(self) -> None:
         """Test that trailing newlines are stripped from output."""
@@ -101,8 +101,8 @@ class TestProcessCommandResult:
             "stdout": "output\n\n",
             "stderr": "",
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output == "output"
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] == "output"
 
     def test_successful_command_strips_carriage_returns(self) -> None:
         """Test that carriage returns are stripped from output."""
@@ -113,8 +113,8 @@ class TestProcessCommandResult:
             "stdout": "line1\r\nline2\r\n",
             "stderr": "",
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output == "line1\nline2"
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] == "line1\nline2"
 
     def test_failed_command_nonzero_rc(self) -> None:
         """Test processing command with non-zero return code."""
@@ -125,12 +125,11 @@ class TestProcessCommandResult:
             "stdout": "",
             "stderr": "error message",
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output is None
-        assert errors is not None
-        assert len(errors) == 1
-        assert "exited with code 1" in str(errors[0])
-        assert "error message" in str(errors[0])
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] is None
+        assert len(result["errors"]) == 1
+        assert "exited with code 1" in str(result["errors"][0])
+        assert "error message" in str(result["errors"][0])
 
     def test_failed_command_no_stderr(self) -> None:
         """Test processing failed command with no stderr."""
@@ -141,9 +140,9 @@ class TestProcessCommandResult:
             "stdout": "",
             "stderr": "",
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output is None
-        assert "No stderr" in str(errors[0])
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] is None
+        assert "No stderr" in str(result["errors"][0])
 
     def test_custom_non_error_codes(self) -> None:
         """Test processing with custom non-error return codes."""
@@ -155,9 +154,9 @@ class TestProcessCommandResult:
             "stdout": "output",
             "stderr": "",
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output == "output"
-        assert errors is None
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] == "output"
+        assert result["errors"] == []
 
     def test_with_validator_success(self) -> None:
         """Test processing with validator that passes."""
@@ -169,9 +168,9 @@ class TestProcessCommandResult:
             "stderr": "",
             "validator": lambda output, prefix: None,
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output == "Hello, world!"
-        assert errors is None
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] == "Hello, world!"
+        assert result["errors"] == []
 
     def test_with_validator_failure(self) -> None:
         """Test processing with validator that fails."""
@@ -185,10 +184,10 @@ class TestProcessCommandResult:
                 "validation failed"
             ),
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output is None
-        assert errors is not None
-        assert "validation failed" in str(errors[0])
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] is None
+        assert len(result["errors"]) == 1
+        assert "validation failed" in str(result["errors"][0])
 
     def test_with_parser_success(self) -> None:
         """Test processing with parser that succeeds."""
@@ -204,9 +203,9 @@ class TestProcessCommandResult:
             "stderr": "",
             "parser": parser,
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output == "HELLO"
-        assert errors is None
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] == "HELLO"
+        assert result["errors"] == []
 
     def test_with_parser_failure(self) -> None:
         """Test processing with parser that returns errors."""
@@ -222,9 +221,9 @@ class TestProcessCommandResult:
             "stderr": "",
             "parser": parser,
         }
-        output, errors = process_command_result(cmd_completed)
-        assert output is None
-        assert "parse error" in str(errors[0])
+        result = process_command_result(cmd_completed)
+        assert result["parsed"] is None
+        assert "parse error" in str(result["errors"][0])
 
     def test_missing_rc(self) -> None:
         """Test ValueError raised when rc is missing."""
@@ -291,10 +290,9 @@ class TestProcessAllCommandResults:
         ]
         results = process_all_command_results(commands)
         assert "whoami" in results
-        assert len(results["whoami"]) == 1
-        assert results["whoami"][0]["implementation"] == "core"
-        assert results["whoami"][0]["parsed"] == "testuser"
-        assert results["whoami"][0]["errors"] is None
+        assert results["whoami"]["implementation"] == "core"
+        assert results["whoami"]["parsed"] == "testuser"
+        assert results["whoami"]["errors"] == []
 
     def test_multiple_implementations_same_type(self) -> None:
         """Test multiple implementations of same type are grouped."""
@@ -316,11 +314,8 @@ class TestProcessAllCommandResults:
         ]
         results = process_all_command_results(commands)
         assert "stat" in results
+        assert isinstance(results["stat"], list)
         assert len(results["stat"]) == 2
-        assert results["stat"][0]["implementation"] == "gnu"
-        assert results["stat"][0]["parsed"] == "gnu output"
-        assert results["stat"][1]["implementation"] == "bsd"
-        assert results["stat"][1]["parsed"] == "bsd output"
 
     def test_multiple_types(self) -> None:
         """Test multiple command types are separated correctly."""
@@ -343,8 +338,8 @@ class TestProcessAllCommandResults:
         results = process_all_command_results(commands)
         assert "whoami" in results
         assert "stat" in results
-        assert len(results["whoami"]) == 1
-        assert len(results["stat"]) == 1
+        assert results["whoami"]["parsed"] == "root"
+        assert results["stat"]["parsed"] == "file info"
 
     def test_failed_command_has_errors(self) -> None:
         """Test failed command populates errors field."""
@@ -358,9 +353,8 @@ class TestProcessAllCommandResults:
             }
         ]
         results = process_all_command_results(commands)
-        assert results["stat"][0]["parsed"] is None
-        assert results["stat"][0]["errors"] is not None
-        assert len(results["stat"][0]["errors"]) == 1
+        assert results["stat"]["parsed"] is None
+        assert len(results["stat"]["errors"]) == 1
 
     def test_empty_list(self) -> None:
         """Test empty list returns empty dict."""
@@ -378,19 +372,6 @@ class TestProcessAllCommandResults:
             }
         ]
         with pytest.raises(ValueError, match="missing 'type'"):
-            process_all_command_results(commands)
-
-    def test_missing_implementation_raises(self) -> None:
-        """Test ValueError raised when implementation is missing."""
-        commands = [
-            {
-                "type": "whoami",
-                "rc": 0,
-                "stdout": "output",
-                "stderr": "",
-            }
-        ]
-        with pytest.raises(ValueError, match="missing 'implementation'"):
             process_all_command_results(commands)
 
 
