@@ -308,7 +308,6 @@ def process_command_result(
         raise ValueError(f"{e_prefix}Command result is missing 'stdout'")
     if not isinstance(output, str):
         raise ValueError(f"{e_prefix}Command result 'stdout' is not str")
-    output = output.rstrip("\n").replace("\r", "")
 
     # Optional but validated if present
     if "stderr" in cmd_completed:

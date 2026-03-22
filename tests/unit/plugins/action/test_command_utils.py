@@ -80,7 +80,8 @@ class TestProcessCommandResult:
     """Tests for process_command_result function."""
 
     def test_successful_command_no_parser(self) -> None:
-        """Test processing successful command without parser."""
+        """Test processing successful command without parser
+        passes through stdout unchanged."""
         cmd_completed = {
             "implementation": "core",
             "type": "whoami",
@@ -89,11 +90,11 @@ class TestProcessCommandResult:
             "stderr": "",
         }
         result = process_command_result(cmd_completed)
-        assert result["parsed"] == "testuser"
+        assert result["parsed"] == "testuser\n"
         assert result["errors"] == []
 
-    def test_successful_command_strips_newlines(self) -> None:
-        """Test that trailing newlines are stripped from output."""
+    def test_no_parser_preserves_newlines(self) -> None:
+        """Test that no-parser passthrough preserves newlines."""
         cmd_completed = {
             "implementation": "core",
             "type": "test",
@@ -102,10 +103,10 @@ class TestProcessCommandResult:
             "stderr": "",
         }
         result = process_command_result(cmd_completed)
-        assert result["parsed"] == "output"
+        assert result["parsed"] == "output\n\n"
 
-    def test_successful_command_strips_carriage_returns(self) -> None:
-        """Test that carriage returns are stripped from output."""
+    def test_no_parser_preserves_carriage_returns(self) -> None:
+        """Test that no-parser passthrough preserves CR."""
         cmd_completed = {
             "implementation": "core",
             "type": "test",
@@ -114,7 +115,7 @@ class TestProcessCommandResult:
             "stderr": "",
         }
         result = process_command_result(cmd_completed)
-        assert result["parsed"] == "line1\nline2"
+        assert result["parsed"] == "line1\r\nline2\r\n"
 
     def test_failed_command_nonzero_rc(self) -> None:
         """Test processing command with non-zero return code."""
@@ -291,7 +292,7 @@ class TestProcessAllCommandResults:
         results = process_all_command_results(commands)
         assert "whoami" in results
         assert results["whoami"]["implementation"] == "core"
-        assert results["whoami"]["parsed"] == "testuser"
+        assert results["whoami"]["parsed"] == "testuser\n"
         assert results["whoami"]["errors"] == []
 
     def test_multiple_implementations_same_type(self) -> None:
