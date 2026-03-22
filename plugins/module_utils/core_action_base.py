@@ -178,6 +178,53 @@ class CoreActionBase:
         self.inventory_hostname = "localhost"
         return self.inventory_hostname
 
+    def _def_effective_user(
+        self, task_vars: Optional[dict[str, Any]] = None
+    ) -> str:
+        """Determine the effective remote user for this task.
+
+        When ``become`` is active, returns the become user (defaults
+        to ``root`` per Ansible convention).  Otherwise returns the
+        connection user.  Falls back to ``ansible_user`` from
+        task_vars, then to the current local username.
+
+        Sets ``self.effective_user`` and returns the value.
+
+        :param Optional[dict[str, Any]] task_vars: Task variables
+        :returns str: The effective remote username
+        """
+        # Check play_context for become
+        play_ctx = getattr(self, "_play_context", None)
+
+        if play_ctx and play_ctx.become:
+            user = play_ctx.become_user
+            if user:
+                self.effective_user = str(user)
+                return self.effective_user
+            # become without explicit user defaults to root
+            self.effective_user = "root"
+            return self.effective_user
+
+        # No become — use connection user
+        if play_ctx:
+            user = play_ctx.remote_user or play_ctx.connection_user
+            if user:
+                self.effective_user = str(user)
+                return self.effective_user
+
+        # Fall back to task_vars
+        if isinstance(task_vars, dict):
+            user = task_vars.get("ansible_user")
+            if user:
+                self.effective_user = str(user)
+                return self.effective_user
+
+        # Last resort: local username
+        import getpass
+
+        self.effective_user = getpass.getuser()
+        return self.effective_user
+
     @typechecked
     def _run_action(
         self,

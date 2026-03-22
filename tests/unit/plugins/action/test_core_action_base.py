@@ -48,6 +48,70 @@ class TestDefInventoryHostname:
         assert result == "localhost"
 
 
+class TestDefEffectiveUser:
+    """Tests for _def_effective_user method."""
+
+    def test_become_with_explicit_user(self, base) -> None:
+        """Test effective user is become_user when become is active."""
+        base._play_context.become = True
+        base._play_context.become_user = "deploy"
+        result = base._def_effective_user({})
+        assert result == "deploy"
+        assert base.effective_user == "deploy"
+
+    def test_become_without_explicit_user(self, base) -> None:
+        """Test effective user defaults to root when become
+        has no user."""
+        base._play_context.become = True
+        base._play_context.become_user = None
+        result = base._def_effective_user({})
+        assert result == "root"
+        assert base.effective_user == "root"
+
+    def test_no_become_uses_remote_user(self, base) -> None:
+        """Test effective user is remote_user when not becoming."""
+        base._play_context.become = False
+        base._play_context.remote_user = "ansible"
+        base._play_context.connection_user = None
+        result = base._def_effective_user({})
+        assert result == "ansible"
+
+    def test_no_become_falls_back_to_connection_user(self, base) -> None:
+        """Test fallback to connection_user when remote_user is None."""
+        base._play_context.become = False
+        base._play_context.remote_user = None
+        base._play_context.connection_user = "conn_user"
+        result = base._def_effective_user({})
+        assert result == "conn_user"
+
+    def test_fallback_to_task_vars(self, base) -> None:
+        """Test fallback to ansible_user from task_vars."""
+        base._play_context.become = False
+        base._play_context.remote_user = None
+        base._play_context.connection_user = None
+        result = base._def_effective_user({"ansible_user": "taskuser"})
+        assert result == "taskuser"
+
+    def test_fallback_to_local_user(self, base) -> None:
+        """Test fallback to local username as last resort."""
+        base._play_context.become = False
+        base._play_context.remote_user = None
+        base._play_context.connection_user = None
+        result = base._def_effective_user({})
+        # Should be the local user running the test
+        import getpass
+
+        assert result == getpass.getuser()
+
+    def test_become_false_explicitly(self, base) -> None:
+        """Test become=False does not use become_user."""
+        base._play_context.become = False
+        base._play_context.become_user = "nobody"
+        base._play_context.remote_user = "ssh_user"
+        result = base._def_effective_user({})
+        assert result == "ssh_user"
+
+
 class TestGetConnectionType:
     """Tests for _get_connection_type method."""
 
