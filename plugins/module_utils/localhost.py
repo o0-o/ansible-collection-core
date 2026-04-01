@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from typing import FrozenSet
 
-
 LOCALHOST_NAMES: FrozenSet[str] = frozenset(
     {
         "localhost",
