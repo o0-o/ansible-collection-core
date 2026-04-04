@@ -72,6 +72,11 @@ jobs:
           ansible-galaxy collection install ./build/o0_o-core-*.tar.gz \
             --force -p ~/.ansible/collections
 
+      - name: Install collection dependencies
+        run: |
+          cd ~/.ansible/collections/ansible_collections/o0_o/core
+          . ${{ github['workspace'] }}/.github/scripts/install-collection-deps.sh
+
       - name: Run quick sanity tests
         run: |
           cd ~/.ansible/collections/ansible_collections/o0_o/core
