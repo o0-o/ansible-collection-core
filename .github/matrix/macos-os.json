@@ -1,0 +1,7 @@
+{
+  "os": [
+    "macos-14",
+    "macos-15",
+    "macos-latest"
+  ]
+}

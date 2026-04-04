@@ -1,0 +1,48 @@
+# vim: ts=2:sw=2:sts=2:et:ft=yaml.ansible
+# -*- mode: yaml; yaml-indent-offset: 2; indent-tabs-mode: nil; -*-
+---
+# GNU General Public License v3.0+
+# SPDX-License-Identifier: GPL-3.0-or-later
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+# Copyright (c) 2025 oØ.o (@o0-o)
+#
+# This file is part of the o0_o.core Ansible Collection.
+
+galaxy_info:
+  role_name: install
+  author: oØ.o (@o0-o)
+  description: >-
+    Installs pip requirements and platform-specific Ansible collections
+    based on the target host platform.
+  license: GPL-3.0-or-later
+  min_ansible_version: '2.14'
+  platforms:
+    - name: GenericUNIX
+      versions:
+        - all
+    - name: Windows
+      versions:
+        - all
+
+dependencies: []
+
+argument_specs:
+  main:
+    short_description: Install dependencies for o0_o collections
+    description:
+      - Installs pip requirements from the collection's requirements.txt.
+      - Determines the target platform using the
+        C(o0_o.core.platform) lookup plugin.
+      - Installs platform-specific collections (C(o0_o.posix) for POSIX hosts,
+        C(o0_o.windows) for Windows hosts).
+    author:
+      - oØ.o (@o0-o)
+    options:
+      o0_core_update_dependencies:
+        type: bool
+        required: false
+        default: false
+        description:
+          - Upgrade collections to latest version if already installed.
+          - Uses C(--upgrade) flag with C(ansible-galaxy collection install).

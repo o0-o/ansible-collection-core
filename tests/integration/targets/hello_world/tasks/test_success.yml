@@ -1,0 +1,31 @@
+# vim: ts=2:sw=2:sts=2:et:ft=yaml.ansible
+# -*- mode: yaml; yaml-indent-offset: 2; indent-tabs-mode: nil; -*-
+---
+# GNU General Public License v3.0+
+# SPDX-License-Identifier: GPL-3.0-or-later
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+# Copyright (c) 2025 oØ.o (@o0-o)
+#
+# This file is part of the o0_o.core Ansible Collection.
+
+- name: Run hello_world module
+  o0_o.core.hello_world:
+  register: hello_world_reg
+
+- name: Assert hello_world succeeded
+  ansible.builtin.assert:
+    that:
+      - hello_world_reg is success
+      - hello_world_reg is not changed
+
+- name: Assert hello_world returned correct message
+  ansible.builtin.assert:
+    that:
+      - hello_world_reg['message'] is defined
+      - hello_world_reg['message'] == 'Hello, world!'
+
+- name: Verify message is a string
+  ansible.builtin.assert:
+    that:
+      - hello_world_reg['message'] is string

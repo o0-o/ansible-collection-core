@@ -22,7 +22,7 @@ ansible-galaxy collection install o0_o.core
 
 ## Dependencies
 
-- `o0_o.utils` >= 2.0.0
+- `o0_o.utils` >= 3.0.0
 
 ## Contributing
 
