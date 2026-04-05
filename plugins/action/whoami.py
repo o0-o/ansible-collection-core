@@ -81,15 +81,15 @@ class ActionModule(CoreActionBase, ActionBase):
         cmd_completed = {**cmd_request, **cmd_result}
 
         # Process the completed command
-        output, errors = process_command_result(cmd_completed)
+        processed = process_command_result(cmd_completed)
 
         result["changed"] = False
         result["invocation"] = self._task.args.copy()
 
-        if errors:
+        if processed["errors"]:
             result["failed"] = True
-            result["msg"] = format_error_message(errors)
+            result["msg"] = format_error_message(processed["errors"])
         else:
-            result["user"] = output
+            result["user"] = processed["parsed"]
 
         return result
