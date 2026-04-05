@@ -74,8 +74,9 @@ jobs:
 
       - name: Install collection dependencies
         run: |
+          SCRIPTS="${{ github['workspace'] }}/.github/scripts"
           cd ~/.ansible/collections/ansible_collections/o0_o/core
-          . ${{ github['workspace'] }}/.github/scripts/install-collection-deps.sh
+          . "$SCRIPTS/install-collection-deps.sh"
 
       - name: Run quick sanity tests
         run: |
