@@ -98,30 +98,43 @@ class ActionModule(CoreActionBase, ActionBase):
             return result
 
         if platform == "posix":
-            target_module = "o0_o.posix.command"
+            target_modules = [
+                "o0_o.posix.command",
+                "ansible.builtin.command",
+            ]
         else:  # windows
-            target_module = "ansible.windows.win_command"
+            target_modules = [
+                "ansible.windows.win_command",
+            ]
 
-        self._display.vvv(f"Delegating to {target_module}")
+        # Try each target module in order, falling back as needed
+        delegated_result = None
+        for target_module in target_modules:
+            self._display.vvv(f"Delegating to {target_module}")
+            try:
+                delegated_result = self._run_action(
+                    plugin_name=target_module,
+                    plugin_args=plugin_args,
+                    task_vars=task_vars,
+                )
+                # Verify we got a valid result
+                if "rc" in delegated_result:
+                    break
+                self._display.vvv(
+                    f"{target_module} returned no rc," " trying fallback"
+                )
+                delegated_result = None
+            except Exception as e:
+                self._display.vvv(
+                    f"{target_module} failed: {e}," " trying fallback"
+                )
+                continue
 
-        # Delegate to the appropriate command module.
-        # Wrap in try/except to handle missing collection gracefully.
-        try:
-            delegated_result = self._run_action(
-                plugin_name=target_module,
-                plugin_args=plugin_args,
-                task_vars=task_vars,
-            )
-        except Exception as e:
-            # Extract collection name from module FQCN
-            collection = ".".join(target_module.rsplit(".", 1)[:-1])
+        if delegated_result is None:
             result["failed"] = True
             result["msg"] = (
-                f"Failed to delegate to {target_module}: {e}. "
-                f"Ensure '{collection}' is installed: "
-                f"ansible-galaxy collection install {collection}. "
-                "Note: Galaxy dependency limitations prevent declaring "
-                "bidirectional dependencies between collections."
+                "No command module available."
+                " Tried: " + ", ".join(target_modules)
             )
             return result
 
