@@ -259,8 +259,13 @@ class CoreActionBase:
         task.args.clear()
         task.args.update(plugin_args)
 
-        if getattr(self, "raw", False):
-            task.args["raw"] = True
+        # Propagate raw mode only when it is a strict boolean. The
+        # string "auto" is truthy but means the delegated plugin should
+        # apply its own detection, so injecting True here would force
+        # raw execution on hosts that have Python.
+        raw_mode = getattr(self, "raw", None)
+        if raw_mode is True or raw_mode is False:
+            task.args["raw"] = raw_mode
 
         plugin = self._shared_loader_obj.action_loader.get(
             plugin_name,

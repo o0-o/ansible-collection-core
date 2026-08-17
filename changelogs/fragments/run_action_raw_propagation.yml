@@ -1,0 +1,7 @@
+---
+bugfixes:
+  - >-
+    CoreActionBase - _run_action no longer forces raw execution on
+    delegated plugins when the caller's raw mode is auto; only strict
+    boolean raw modes propagate to the delegate
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).
