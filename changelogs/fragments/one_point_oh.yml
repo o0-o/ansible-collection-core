@@ -1,0 +1,7 @@
+---
+major_changes:
+  - >-
+    The collection crosses to 1.0.0: the delegation contract that the
+    o0_o namespace builds on (run_action recursion guard, raw mode
+    propagation, module fallback) is now tested and stable
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).
