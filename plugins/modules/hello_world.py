@@ -17,7 +17,7 @@ DOCUMENTATION = r"""
 ---
 module: hello_world
 short_description: Echo 'Hello, world!' and validate the output
-version_added: "0.1.0"
+version_added: "0.2.0"
 description:
   - Executes the C(echo "Hello, world!") command on the remote host
     using the COMMAND_SPEC pattern for cross-platform command execution.

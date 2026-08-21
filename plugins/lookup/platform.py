@@ -36,7 +36,7 @@ DOCUMENTATION = r"""
 ---
 name: platform
 author: oØ.o (@o0-o)
-version_added: "0.1.0"
+version_added: "0.2.0"
 short_description: Get platform from connection plugin
 description:
   - Returns the platform ('posix' or 'windows') based on the

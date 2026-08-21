@@ -17,7 +17,7 @@ DOCUMENTATION = r"""
 ---
 module: command
 short_description: Execute commands on remote hosts across platforms
-version_added: "0.1.0"
+version_added: "0.2.0"
 description:
   - Cross-platform command execution that automatically routes to the
     appropriate platform-specific module.

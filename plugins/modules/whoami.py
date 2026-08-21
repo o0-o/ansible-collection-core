@@ -17,7 +17,7 @@ DOCUMENTATION = r"""
 ---
 module: whoami
 short_description: Get the current user via the whoami command
-version_added: "0.1.0"
+version_added: "0.2.0"
 description:
   - Executes the C(whoami) command on the remote host using the
     COMMAND_SPEC pattern for cross-platform command execution.
