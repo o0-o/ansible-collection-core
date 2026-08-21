@@ -1,4 +1,14 @@
-# Development and testing requirements
+# Requirements for o0_o.core collection
+
+# Core dependencies
+typeguard>=4.0.0            # Runtime type checking
+
+# Unit test runner. tests/unit/requirements.txt links here, which is
+# where ansible-test reads a collection's test requirements from, and
+# the shared development venv installs the lock this file compiles to.
+# ansible-test provisions these itself only for an environment it
+# manages, and the shared venv is not one, so `ansible-test units`
+# cannot run without them.
 pytest>=7.0.0
+pytest-xdist
 pytest-cov>=4.0.0
-typeguard>=4.0.0
