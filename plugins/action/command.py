@@ -121,20 +121,19 @@ class ActionModule(CoreActionBase, ActionBase):
                 if "rc" in delegated_result:
                     break
                 self._display.vvv(
-                    f"{target_module} returned no rc," " trying fallback"
+                    f"{target_module} returned no rc, trying fallback"
                 )
                 delegated_result = None
             except Exception as e:
                 self._display.vvv(
-                    f"{target_module} failed: {e}," " trying fallback"
+                    f"{target_module} failed: {e}, trying fallback"
                 )
                 continue
 
         if delegated_result is None:
             result["failed"] = True
-            result["msg"] = (
-                "No command module available."
-                " Tried: " + ", ".join(target_modules)
+            result["msg"] = "No command module available. Tried: " + ", ".join(
+                target_modules
             )
             return result
 

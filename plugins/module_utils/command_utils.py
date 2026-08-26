@@ -225,8 +225,7 @@ def process_command_spec(
                         raise ValueError(f"{e_prefix}Command is empty")
                     if not isinstance(cmd_tuple[0], str):
                         raise TypeError(
-                            f"{e_prefix}Command (without args) is not a "
-                            "string"
+                            f"{e_prefix}Command (without args) is not a string"
                         )
                     if cmd_tuple[0] == "":
                         raise ValueError(
