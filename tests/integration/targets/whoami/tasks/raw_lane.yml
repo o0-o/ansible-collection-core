@@ -1,0 +1,34 @@
+# vim: ts=2:sw=2:sts=2:et:ft=yaml.ansible
+# -*- mode: yaml; yaml-indent-offset: 2; indent-tabs-mode: nil; -*-
+---
+# GNU General Public License v3.0+
+# SPDX-License-Identifier: GPL-3.0-or-later
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+# Copyright (c) 2025 oØ.o (@o0-o)
+#
+# This file is part of the o0_o.core Ansible Collection.
+
+# This target's entry into the raw lane, per Running CI. It runs the
+# same task file main.yml runs, so the assertions have one home; what
+# it chooses is which of them an interpreter-free host can answer and
+# what vars they run under.
+#
+# The module is a command spec routed through o0_o.core.command, which
+# hands a POSIX host to o0_o.posix.command, so the fallback carries it
+# the same way it carries anything else.
+#
+# The file's one gathered fact is already asked for conditionally: the
+# case that measures the answer against ansible_user_id stands down
+# where no facts were gathered, which is every host in this lane. What
+# the module read is still asserted to be a user's name.
+#
+# main.yml turns the file through a loop that names the row's check
+# mode as a var. Nothing in the file reads that var, so the two rows
+# ask the host the same question twice; the lane takes the row that
+# runs and pays for the round trip once.
+
+- name: Ask a host with no interpreter who it is running as
+  ansible.builtin.include_tasks: test_success.yml
+  vars:
+    ansible_check_mode: false
