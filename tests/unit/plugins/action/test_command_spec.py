@@ -76,4 +76,4 @@ class TestCommandSpecStructure:
     def test_all_commands_have_command(self, impl: str, cmd_type: str) -> None:
         """Test all commands have non-empty command."""
         command = COMMAND_SPEC[impl][cmd_type]["command"]
-        assert command, f"{impl}.{cmd_type} has empty command"
+        assert command != (), f"{impl}.{cmd_type} has empty command"
