@@ -1,0 +1,144 @@
+# vim: ts=2:sw=2:sts=2:et:ft=yaml.ansible
+# -*- mode: yaml; yaml-indent-offset: 2; indent-tabs-mode: nil; -*-
+---
+# GNU General Public License v3.0+
+# SPDX-License-Identifier: GPL-3.0-or-later
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+# Copyright (c) 2025 oØ.o (@o0-o)
+#
+# This file is part of the o0_o.core Ansible Collection.
+
+- name: Test o0_o.core.var lookup plugin
+  block:
+
+    - name: Set test variables
+      ansible.builtin.set_fact:
+        test_var_string: 'hello world'
+        test_var_int: 42
+        test_var_dict:
+          key1: value1
+          key2: value2
+        test_var_list:
+          - item1
+          - item2
+
+    - name: Look up string variable
+      ansible.builtin.set_fact:
+        looked_up_string: '{{ lookup("o0_o.core.var", "test_var_string") }}'
+
+    - name: Verify string lookup
+      ansible.builtin.assert:
+        that:
+          - looked_up_string == 'hello world'
+
+    - name: Look up integer variable
+      ansible.builtin.set_fact:
+        looked_up_int: '{{ lookup("o0_o.core.var", "test_var_int") }}'
+
+    - name: Verify integer lookup
+      ansible.builtin.assert:
+        that:
+          - looked_up_int == 42
+
+    - name: Look up dict variable
+      ansible.builtin.set_fact:
+        looked_up_dict: '{{ lookup("o0_o.core.var", "test_var_dict") }}'
+
+    - name: Verify dict lookup
+      ansible.builtin.assert:
+        that:
+          - looked_up_dict['key1'] == 'value1'
+          - looked_up_dict['key2'] == 'value2'
+
+    - name: Look up list variable
+      ansible.builtin.set_fact:
+        looked_up_list: '{{ lookup("o0_o.core.var", "test_var_list") }}'
+
+    - name: Verify list lookup
+      ansible.builtin.assert:
+        that:
+          - looked_up_list | length == 2
+          - looked_up_list[0] == 'item1'
+          - looked_up_list[1] == 'item2'
+
+    - name: Look up built-in fact
+      ansible.builtin.set_fact:
+        looked_up_hostname: >-
+          {{ lookup("o0_o.core.var", "ansible_hostname") }}
+
+    - name: Verify built-in fact lookup
+      ansible.builtin.assert:
+        that:
+          - looked_up_hostname is defined
+          - looked_up_hostname | length > 0
+
+    - name: Look up nonexistent variable with default
+      ansible.builtin.set_fact:
+        with_default: >-
+          {{ lookup("o0_o.core.var",
+                    "nonexistent_var",
+                    default="default_value") }}
+
+    - name: Verify default value returned
+      ansible.builtin.assert:
+        that:
+          - with_default == 'default_value'
+
+    - name: Look up nonexistent variable with None default
+      ansible.builtin.set_fact:
+        with_none_default: >-
+          {{ lookup("o0_o.core.var",
+                    "another_nonexistent",
+                    default=None) }}
+
+    - name: Verify None default returned
+      ansible.builtin.assert:
+        that:
+          - with_none_default is none
+
+    - name: Look up nonexistent variable with dict default
+      ansible.builtin.set_fact:
+        with_dict_default: >-
+          {{ lookup("o0_o.core.var",
+                    "missing_dict",
+                    default={"default": True}) }}
+
+    - name: Verify dict default returned
+      ansible.builtin.assert:
+        that:
+          - with_dict_default['default'] == True
+
+    - name: Test multiple lookups
+      ansible.builtin.set_fact:
+        multiple_vars: >-
+          {{ lookup("o0_o.core.var",
+                    "test_var_string",
+                    "test_var_int") }}
+
+    - name: Verify multiple lookups
+      ansible.builtin.assert:
+        that:
+          - multiple_vars is sequence
+          - multiple_vars | length == 2
+          - multiple_vars[0] == 'hello world'
+          - multiple_vars[1] == 42
+
+    - name: 'Fail: Test unexpected kwargs raises error'
+      block:
+
+        - name: Try to use invalid kwargs parameter
+          ansible.builtin.set_fact:
+            invalid_lookup: >-
+              {{ lookup("o0_o.core.var",
+                        "test_var_string",
+                        invalid_param="value") }}
+
+      rescue:
+
+        - name: Assert error occurred as expected
+          ansible.builtin.assert:
+            that:
+              - >-
+                'unexpected keyword argument' in
+                ansible_failed_result['msg'] | lower

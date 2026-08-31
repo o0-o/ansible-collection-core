@@ -1,0 +1,14 @@
+---
+minor_changes:
+  - >-
+    VarsLookupBase moves here from o0_o.utils. utils' one testable
+    property is purity - it imports nothing from the Ansible runtime -
+    and lookup machinery was the single file that broke it. core is
+    where runtime machinery lives
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).
+  - >-
+    var lookup moves here from o0_o.utils, with the base class it
+    extends. A collection at the bottom of the ladder cannot keep a
+    lookup that imports from a collection above it, so the plugin
+    travels with its machinery and is now ``o0_o.core.var``
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).

@@ -41,12 +41,16 @@ from ansible_collections.o0_o.core.plugins.module_utils.core_action_base import 
 from ansible_collections.o0_o.core.plugins.module_utils.localhost import (
     LOCALHOST_NAMES,
 )
+from ansible_collections.o0_o.core.plugins.module_utils.vars_lookup_base import (  # noqa: E501
+    VarsLookupBase,
+)
 
 __all__ = [
     "COMMAND_SPEC",
     "CONNECTION_BY_PLATFORM",
     "CoreActionBase",
     "LOCALHOST_NAMES",
+    "VarsLookupBase",
     "display_longest_command",
     "format_error_message",
     "process_all_command_results",
