@@ -1,0 +1,177 @@
+# vim: ts=2:sw=2:sts=2:et:ft=yaml.ansible
+# -*- mode: yaml; yaml-indent-offset: 2; indent-tabs-mode: nil; -*-
+---
+# GNU General Public License v3.0+
+# SPDX-License-Identifier: GPL-3.0-or-later
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+# Copyright (c) 2025 oØ.o (@o0-o)
+#
+# This file is part of the o0_o.core Ansible Collection.
+
+# Every case reads the fact a run registered rather than the host var
+# it set, because each run below describes a different connection and
+# the host var only ever holds the last of them.
+#
+# Nothing in this file reaches the host. The module reads the plugin
+# the executor built and opens nothing, which is what lets the cases
+# below describe an ssh transport that is never connected and an
+# escalation that is never invoked.
+
+- name: Describe the connection ansible-test hands this target
+  o0_o.core.connection:
+  register: connection_reg
+
+- name: Assert the local transport is described as what it is
+  vars:
+    con: "{{ connection_reg['ansible_facts']['o0_connection'] }}"
+  ansible.builtin.assert:
+    that:
+      - connection_reg is not changed
+      - con['plugin'] == 'ansible.builtin.local'
+      - con['transport'] == 'local'
+      - con['platform'] == 'posix'
+      - con['local'] is true
+      # A setting the transport does not declare is null: local is
+      # pointed at no address, port or key
+      - con['addr'] is none
+      - con['port'] is none
+      - con['private_key_file'] is none
+      # local ignores every source of a remote user and runs as the
+      # user the CLI runs as
+      - con['user'] == lookup('pipe', 'id -un')
+      # A task running as the connecting user has no escalation
+      - con['become'] is none
+      # Nothing outside Ansible was consulted; the record says so and
+      # still names who said it
+      - con['evidence'] == {}
+      - con['origins'] == ['o0_o.core.connection']
+      - >-
+        con.keys() | list | sort == ['addr', 'become', 'evidence',
+        'local', 'origins', 'platform', 'plugin', 'port',
+        'private_key_file', 'transport', 'user']
+    fail_msg: 'o0_connection does not describe the local transport: {{ con }}'
+
+- name: Assert the fact was set on the host as well as returned
+  ansible.builtin.assert:
+    that:
+      - o0_connection == connection_reg['ansible_facts']['o0_connection']
+    fail_msg: 'the host var is not the fact the run returned'
+
+- name: Describe the connection with escalation in force
+  o0_o.core.connection:
+  become: true
+  become_method: sudo
+  become_user: root
+  register: connection_become_reg
+
+- name: Assert the escalation is described and was never invoked
+  vars:
+    con: "{{ connection_become_reg['ansible_facts']['o0_connection'] }}"
+  ansible.builtin.assert:
+    that:
+      - connection_become_reg is not changed
+      - >-
+        con['become'] == {'plugin': 'ansible.builtin.sudo',
+        'method': 'sudo', 'user': 'root'}
+      # Escalation changes nothing about the transport itself
+      - con['plugin'] == 'ansible.builtin.local'
+      - con['user'] == lookup('pipe', 'id -un')
+    fail_msg: 'o0_connection does not describe the escalation: {{ con }}'
+
+- name: Describe an escalation that named no user
+  o0_o.core.connection:
+  become: true
+  register: connection_become_default_reg
+
+- name: Assert the user is the default every become plugin ships with
+  vars:
+    con: >-
+      {{ connection_become_default_reg['ansible_facts']['o0_connection'] }}
+  ansible.builtin.assert:
+    that:
+      - con['become']['user'] == 'root'
+      - con['become']['method'] is string
+    fail_msg: 'an unnamed become user is not root: {{ con["become"] }}'
+
+- name: Describe an ssh transport pointed at the loopback, unopened
+  o0_o.core.connection:
+  vars:
+    ansible_connection: ssh
+    ansible_host: 127.0.0.1
+    ansible_port: 2201
+    ansible_user: nobody-in-particular
+    ansible_ssh_private_key_file: /nonexistent/key
+  register: connection_ssh_reg
+
+- name: Assert every setting is what the ssh plugin resolved it to
+  vars:
+    con: "{{ connection_ssh_reg['ansible_facts']['o0_connection'] }}"
+  ansible.builtin.assert:
+    that:
+      - connection_ssh_reg is not changed
+      - con['plugin'] == 'ansible.builtin.ssh'
+      - con['transport'] == 'ssh'
+      - con['platform'] == 'posix'
+      # ssh to the loopback lands on the controller
+      - con['local'] is true
+      - con['addr'] == '127.0.0.1'
+      - con['port'] == 2201
+      - con['user'] == 'nobody-in-particular'
+      - con['private_key_file'] == '/nonexistent/key'
+      - con['become'] is none
+    fail_msg: 'o0_connection does not describe the ssh transport: {{ con }}'
+
+- name: Describe an ssh transport that left everything to ssh
+  o0_o.core.connection:
+  vars:
+    ansible_connection: ssh
+    ansible_host: 192.0.2.10
+  register: connection_ssh_bare_reg
+
+- name: Assert what was left to the transport is null rather than asserted
+  vars:
+    con: "{{ connection_ssh_bare_reg['ansible_facts']['o0_connection'] }}"
+  ansible.builtin.assert:
+    that:
+      - con['addr'] == '192.0.2.10'
+      - con['local'] is false
+      # No port was set anywhere, so ssh chooses and the fact says so
+      - con['port'] is none
+    fail_msg: 'a setting left to ssh was asserted for it: {{ con }}'
+
+- name: Describe the connection in check mode
+  o0_o.core.connection:
+  check_mode: true
+  register: connection_check_reg
+
+- name: Assert check mode publishes what a run does
+  ansible.builtin.assert:
+    that:
+      - connection_check_reg is not changed
+      - connection_check_reg['ansible_facts']['o0_connection']
+        == connection_reg['ansible_facts']['o0_connection']
+    fail_msg: 'check mode described a different connection'
+
+- name: 'Fail: an option the module does not take'
+  block:
+
+    - name: Pass an option the module does not take
+      o0_o.core.connection:
+        transport: ssh
+      register: connection_bogus_reg
+
+    - name: Fail if the option was accepted
+      ansible.builtin.fail:
+        msg: 'o0_o.core.connection accepted an option it does not take'
+
+  rescue:
+
+    - name: Assert the option was refused by name
+      ansible.builtin.assert:
+        that:
+          - connection_bogus_reg is failed
+          - "'transport' in connection_bogus_reg['msg']"
+        fail_msg: >-
+          the failure did not name the option:
+          {{ connection_bogus_reg['msg'] }}

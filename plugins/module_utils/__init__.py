@@ -39,6 +39,10 @@ from ansible_collections.o0_o.core.plugins.module_utils.command_utils import (
 )
 from ansible_collections.o0_o.core.plugins.module_utils.connection import (
     CONNECTION_BY_PLATFORM,
+    LOCAL_TRANSPORTS,
+    compose_connection,
+    option_of,
+    platform_of,
 )
 from ansible_collections.o0_o.core.plugins.module_utils.core_action_base import (  # noqa: E501
     CoreActionBase,
@@ -69,17 +73,21 @@ __all__ = [
     "EVIDENCE",
     "EVIDENCE_KINDS",
     "LOCALHOST_NAMES",
+    "LOCAL_TRANSPORTS",
     "ORIGINS",
     "VarsLookupBase",
     "command_name",
     "command_names",
     "commands_run",
+    "compose_connection",
     "compose_evidence",
     "display_longest_command",
     "format_error_message",
     "merge_entry",
     "merge_evidence",
     "name_origins",
+    "option_of",
+    "platform_of",
     "process_all_command_results",
     "process_command_result",
     "process_command_spec",

@@ -30,6 +30,7 @@ from ansible_collections.o0_o.utils.plugins.module_utils import typechecked
 
 from ansible_collections.o0_o.core.plugins.module_utils.connection import (
     CONNECTION_BY_PLATFORM,
+    platform_of,
 )
 
 
@@ -131,9 +132,9 @@ class CoreActionBase:
         :raises ValueError: If connection type is not recognized
         """
         connection_type = self._get_connection_type()
-        for platform, connections in CONNECTION_BY_PLATFORM.items():
-            if connection_type in connections:
-                return platform
+        platform = platform_of(connection_type)
+        if platform is not None:
+            return platform
         # Build error message with all known platforms
         known = ", ".join(
             f"{p} ({', '.join(sorted(c))})"

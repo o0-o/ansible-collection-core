@@ -1,0 +1,24 @@
+---
+minor_changes:
+  - >-
+    connection - new module. Publishes ``o0_connection``, what the
+    transport Ansible chose for a host resolved to: the plugin by its
+    full name and the transport it declares, the platform that
+    transport reaches, whether it lands on the controller, the address,
+    port, login and key it was pointed at, and the escalation in force.
+    It reads the connection and become plugins the executor built for
+    the task, after every source of a setting has applied, so it says
+    what will be used rather than what any one variable said - and it
+    says so without opening the connection or invoking the escalation,
+    so it answers for an unreachable host too. A setting the transport
+    does not declare is null; the local transport declares none and is
+    ``local``, as is any transport pointed at a loopback name
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).
+  - >-
+    connection - retires ``o0_o.connection.facts``, last published at
+    1.0.1, which read four inventory variables back and renamed them.
+    Its ``addr``, ``plugin`` and ``port`` survive as what the plugin
+    resolved them to; its ``key.file`` is ``private_key_file``, a path
+    and never the key; ``transport``, ``platform``, ``local``, ``user``
+    and ``become`` are new
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).
