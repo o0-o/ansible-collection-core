@@ -1,0 +1,33 @@
+---
+minor_changes:
+  - >-
+    controller - new module. Publishes ``o0_controller``: who the
+    controller process runs as, the interpreter it runs under and the
+    pip beside it, and the configuration file Ansible loaded with what
+    it says. ``gather_subset`` selects among ``user``, ``python`` and
+    ``config``, and only the subsets selected appear, so a subset not
+    gathered can be told from one that answered nothing. It reads the
+    process itself - its effective ids and the names the user database
+    gives them, the interpreter executing the play, the file Ansible's
+    own configuration manager settled on - and runs nothing, on the
+    controller or anywhere else. The evidence names the configuration
+    file where the config subset read one, is empty where it looked and
+    found none, and is absent where the subset did not run
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).
+  - >-
+    controller - retires ``o0_o.controller.facts``, last published at
+    1.0.1. Its ``user.id`` and ``user.group.id`` are ``uid`` and
+    ``gid``, both integers now where the group id was a string read
+    back from ``id``, and ``user.group.name`` is ``group``. A
+    controller with no configuration file is described as one rather
+    than failed. The Windows guard and the ``run_once`` warning are
+    gone: ansible-core refuses a Windows controller itself, and the
+    warning fired on every single-host play
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).
+  - >-
+    o0_o.connection and o0_o.controller, each published at 1.0.0 and
+    1.0.1 and nowhere since, retire into this collection as the
+    ``connection`` and ``controller`` modules. Their machinery halves -
+    the platform table and the loopback names - were already here, and
+    the two modules are what those halves were for
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).

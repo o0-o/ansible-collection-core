@@ -44,6 +44,15 @@ from ansible_collections.o0_o.core.plugins.module_utils.connection import (
     option_of,
     platform_of,
 )
+from ansible_collections.o0_o.core.plugins.module_utils.controller import (
+    SUBSETS,
+    compose_config,
+    compose_controller,
+    compose_python,
+    compose_user,
+    parse_config,
+    select_subsets,
+)
 from ansible_collections.o0_o.core.plugins.module_utils.core_action_base import (  # noqa: E501
     CoreActionBase,
 )
@@ -75,20 +84,27 @@ __all__ = [
     "LOCALHOST_NAMES",
     "LOCAL_TRANSPORTS",
     "ORIGINS",
+    "SUBSETS",
     "VarsLookupBase",
     "command_name",
     "command_names",
     "commands_run",
+    "compose_config",
     "compose_connection",
+    "compose_controller",
     "compose_evidence",
+    "compose_python",
+    "compose_user",
     "display_longest_command",
     "format_error_message",
     "merge_entry",
     "merge_evidence",
     "name_origins",
     "option_of",
+    "parse_config",
     "platform_of",
     "process_all_command_results",
     "process_command_result",
     "process_command_spec",
+    "select_subsets",
 ]

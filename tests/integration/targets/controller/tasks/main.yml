@@ -1,0 +1,232 @@
+# vim: ts=2:sw=2:sts=2:et:ft=yaml.ansible
+# -*- mode: yaml; yaml-indent-offset: 2; indent-tabs-mode: nil; -*-
+---
+# GNU General Public License v3.0+
+# SPDX-License-Identifier: GPL-3.0-or-later
+# (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+#
+# Copyright (c) 2025 oØ.o (@o0-o)
+#
+# This file is part of the o0_o.core Ansible Collection.
+
+# Every case reads the fact a run registered rather than the host var
+# it set, because each run below selects a different subset and the
+# host var only ever holds the last of them.
+#
+# The fact is about the controller, so every measurement it is held to
+# is taken on the controller too: the pipe lookup runs there whatever
+# host the play addresses.
+
+- name: Ask the controller what it will be held to
+  vars:
+    controller_pip_probe: |
+      import importlib.metadata as metadata
+      try:
+          print(metadata.version("pip"))
+      except metadata.PackageNotFoundError:
+          print("absent")
+  ansible.builtin.set_fact:
+    controller_uid: "{{ lookup('pipe', 'id -u') }}"
+    controller_gid: "{{ lookup('pipe', 'id -g') }}"
+    controller_name: "{{ lookup('pipe', 'id -un') }}"
+    controller_group: "{{ lookup('pipe', 'id -gn') }}"
+    controller_pip: >-
+      {{ lookup('pipe', ansible_playbook_python ~ ' -c '
+                        ~ (controller_pip_probe | quote)) }}
+
+- name: Describe the controller with the default subset
+  o0_o.core.controller:
+  register: controller_reg
+
+- name: Assert the identity is the one the controller answers for
+  vars:
+    ctl: "{{ controller_reg['ansible_facts']['o0_controller'] }}"
+  ansible.builtin.assert:
+    that:
+      - controller_reg is not changed
+      - ctl['user']['uid'] == controller_uid | int
+      - ctl['user']['gid'] == controller_gid | int
+      - ctl['user']['name'] == controller_name
+      - ctl['user']['group'] == controller_group
+    fail_msg: 'o0_controller.user is not who this run is: {{ ctl["user"] }}'
+
+- name: Assert the interpreter is the one running the play
+  vars:
+    ctl: "{{ controller_reg['ansible_facts']['o0_controller'] }}"
+  ansible.builtin.assert:
+    that:
+      - ctl['python']['interpreter']['path'] == ansible_playbook_python
+      - >-
+        ctl['python']['interpreter']['version']['id']
+        is match('^[0-9]+\.[0-9]+\.[0-9]+')
+    fail_msg: >-
+      o0_controller.python is not the interpreter running this play:
+      {{ ctl['python'] }}
+
+# The interpreter either has pip or it does not, and each is asserted
+# as what it is rather than one assertion standing down for the other.
+- name: Assert an interpreter without pip says so with null
+  ansible.builtin.assert:
+    that:
+      - controller_reg['ansible_facts']['o0_controller']['python']['pip']
+        is none
+    fail_msg: 'the interpreter has no pip and the fact says otherwise'
+  when: controller_pip == 'absent'
+
+- name: Assert an interpreter with pip names its version
+  ansible.builtin.assert:
+    that:
+      - >-
+        controller_reg['ansible_facts']['o0_controller']['python']['pip']
+        == {'version': {'id': controller_pip}}
+    fail_msg: >-
+      the interpreter has pip {{ controller_pip }} and the fact says
+      otherwise
+  when: controller_pip != 'absent'
+
+- name: Assert the configuration file is the one Ansible loaded
+  vars:
+    ctl: "{{ controller_reg['ansible_facts']['o0_controller'] }}"
+  ansible.builtin.assert:
+    that:
+      - ctl['config']['path'] == ansible_config_file
+      - ctl['config']['settings'] is mapping
+      - ctl['origins'] == ['o0_o.core.controller']
+      - >-
+        ctl.keys() | list | sort
+        == ['config', 'evidence', 'origins', 'python', 'user']
+    fail_msg: >-
+      o0_controller.config is not the file this run loaded:
+      {{ ctl['config'] }}
+
+# A run either has a configuration file or it does not, and the
+# evidence says which: the file it read, or that it looked and found
+# none.
+- name: Assert the evidence names the file that was read
+  vars:
+    ctl: "{{ controller_reg['ansible_facts']['o0_controller'] }}"
+    # The sections the file has, read off the file itself, so the
+    # fact is held to the file and not to an assumption about it -
+    # the one ansible-test writes has none
+    sections: >-
+      {{ lookup('file', ansible_config_file)
+         | regex_findall('^[[]([^]]+)[]]', multiline=True) | sort }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        ctl['evidence'] == {'files': [ansible_config_file]}
+      - ctl['config']['settings'].keys() | list | sort == sections
+      - >-
+        ctl['config']['settings'].values() | map('type_debug')
+        | reject('eq', 'dict') | list | length == 0
+    fail_msg: >-
+      the fact does not say what the file says:
+      {{ ctl['evidence'] }} {{ ctl['config']['settings'].keys() | list }}
+  when: ansible_config_file is not none
+
+- name: Assert the evidence says a file was looked for and not found
+  vars:
+    ctl: "{{ controller_reg['ansible_facts']['o0_controller'] }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        ctl['evidence'] == {'files': []}
+      - ctl['config']['settings'] == {}
+    fail_msg: >-
+      the evidence does not say no file was found:
+      {{ ctl['evidence'] }}
+  when: ansible_config_file is none
+
+- name: Assert the fact was set on the host as well as returned
+  ansible.builtin.assert:
+    that:
+      - o0_controller == controller_reg['ansible_facts']['o0_controller']
+    fail_msg: 'the host var is not the fact the run returned'
+
+- name: Describe only the identity
+  o0_o.core.controller:
+    gather_subset:
+      - user
+  register: controller_user_reg
+
+- name: Assert a subset not gathered is absent, not empty
+  vars:
+    ctl: "{{ controller_user_reg['ansible_facts']['o0_controller'] }}"
+  ansible.builtin.assert:
+    that:
+      - ctl.keys() | list | sort == ['evidence', 'origins', 'user']
+      - ctl['user'] == controller_reg['ansible_facts']['o0_controller']['user']
+      # The identity is read off the process, so nothing was consulted
+      # and the record says so
+      - ctl['evidence'] == {}
+      - ctl['origins'] == ['o0_o.core.controller']
+    fail_msg: 'a gather of one subset published more than one: {{ ctl }}'
+
+- name: Describe everything but the configuration file
+  o0_o.core.controller:
+    gather_subset:
+      - all
+      - '!config'
+  register: controller_no_config_reg
+
+- name: Assert the negation removed the one subset that reads a file
+  vars:
+    ctl: "{{ controller_no_config_reg['ansible_facts']['o0_controller'] }}"
+  ansible.builtin.assert:
+    that:
+      - ctl.keys() | list | sort == ['evidence', 'origins', 'python', 'user']
+      - ctl['evidence'] == {}
+    fail_msg: 'all minus config is not user and python: {{ ctl }}'
+
+- name: Describe nothing
+  o0_o.core.controller:
+    gather_subset:
+      - '!all'
+  register: controller_nothing_reg
+
+- name: Assert a gather of nothing is described, not skipped
+  ansible.builtin.assert:
+    that:
+      - >-
+        controller_nothing_reg['ansible_facts']['o0_controller']
+        == {'evidence': {}, 'origins': ['o0_o.core.controller']}
+    fail_msg: >-
+      a gather of nothing published something:
+      {{ controller_nothing_reg['ansible_facts']['o0_controller'] }}
+
+- name: Describe the controller in check mode
+  o0_o.core.controller:
+  check_mode: true
+  register: controller_check_reg
+
+- name: Assert check mode publishes what a run does
+  ansible.builtin.assert:
+    that:
+      - controller_check_reg is not changed
+      - controller_check_reg['ansible_facts']['o0_controller']
+        == controller_reg['ansible_facts']['o0_controller']
+    fail_msg: 'check mode described a different controller'
+
+- name: 'Fail: a subset the fact does not have'
+  block:
+
+    - name: Ask for a subset the fact does not have
+      o0_o.core.controller:
+        gather_subset:
+          - hardware
+      register: controller_bogus_reg
+
+    - name: Fail if the subset was accepted
+      ansible.builtin.fail:
+        msg: 'o0_o.core.controller accepted a subset it does not have'
+
+  rescue:
+
+    - name: Assert the subset was refused by name
+      ansible.builtin.assert:
+        that:
+          - controller_bogus_reg is failed
+          - "'hardware' in controller_bogus_reg['msg']"
+        fail_msg: >-
+          the failure did not name the subset:
+          {{ controller_bogus_reg['msg'] }}
