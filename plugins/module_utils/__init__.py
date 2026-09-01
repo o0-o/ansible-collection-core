@@ -18,6 +18,11 @@ on remote hosts across different platforms (POSIX, Windows).
 Command specifications are defined in command_spec.py and processed
 via standalone functions in command_utils.py. Action plugins import
 COMMAND_SPEC and the processing functions directly.
+
+The provenance vocabulary every fact in the o0_o namespace speaks -
+``evidence`` keyed by kind, ``origins`` naming who composed a fact -
+is defined in evidence_utils.py and exported here for the collections
+above this one to import.
 """
 
 from __future__ import annotations
@@ -38,6 +43,18 @@ from ansible_collections.o0_o.core.plugins.module_utils.connection import (
 from ansible_collections.o0_o.core.plugins.module_utils.core_action_base import (  # noqa: E501
     CoreActionBase,
 )
+from ansible_collections.o0_o.core.plugins.module_utils.evidence_utils import (  # noqa: E501
+    EVIDENCE,
+    EVIDENCE_KINDS,
+    ORIGINS,
+    command_name,
+    command_names,
+    commands_run,
+    compose_evidence,
+    merge_entry,
+    merge_evidence,
+    name_origins,
+)
 from ansible_collections.o0_o.core.plugins.module_utils.localhost import (
     LOCALHOST_NAMES,
 )
@@ -49,10 +66,20 @@ __all__ = [
     "COMMAND_SPEC",
     "CONNECTION_BY_PLATFORM",
     "CoreActionBase",
+    "EVIDENCE",
+    "EVIDENCE_KINDS",
     "LOCALHOST_NAMES",
+    "ORIGINS",
     "VarsLookupBase",
+    "command_name",
+    "command_names",
+    "commands_run",
+    "compose_evidence",
     "display_longest_command",
     "format_error_message",
+    "merge_entry",
+    "merge_evidence",
+    "name_origins",
     "process_all_command_results",
     "process_command_result",
     "process_command_spec",

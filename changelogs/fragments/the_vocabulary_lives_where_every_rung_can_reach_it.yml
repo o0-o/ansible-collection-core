@@ -1,0 +1,17 @@
+---
+minor_changes:
+  - >-
+    The provenance vocabulary moves here from o0_o.posix - ``evidence``
+    keyed by kind, ``origins`` naming the modules that composed a fact,
+    the helpers that compose, merge and name them, and the
+    ``o0_o.core.evidence`` documentation fragment that states the
+    rules. The ladder runs utils, core, posix, so a fact this
+    collection publishes could not name its provenance in words that
+    lived a rung above it. Nothing about the vocabulary changes in the
+    move: kind by key, a command named rather than spelled, origins
+    attached wherever evidence already is, and both accumulating where
+    every other field is replaced. What it gains is one statement it
+    had no occasion for before - a producer whose source is the
+    Ansible process itself carries an empty record and still names
+    itself
+    (https://github.com/o0-o/ansible-collection-core/pull/XXX).
