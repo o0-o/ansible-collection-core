@@ -18,28 +18,34 @@
 # below describe an ssh transport that is never connected and an
 # escalation that is never invoked.
 
+# ansible-test hands this target whatever transport the lane runs on:
+# local on the controller, ssh to a guest in the vm lane. The fact is
+# held to the transport the play actually has, read off the same
+# connection variables the executor read, rather than to the one the
+# author happened to be sitting on.
+- name: Name the transport the lane hands this target
+  vars:
+    named: "{{ ansible_connection | default('ssh') }}"
+  ansible.builtin.set_fact:
+    con_transport: "{{ 'ssh' if named == 'smart' else named }}"
+    con_loopback:
+      - 127.0.0.1
+      - localhost
+      - ::1
+
 - name: Describe the connection ansible-test hands this target
   o0_o.core.connection:
   register: connection_reg
 
-- name: Assert the local transport is described as what it is
+- name: Assert the transport is described as what it is
   vars:
     con: "{{ connection_reg['ansible_facts']['o0_connection'] }}"
   ansible.builtin.assert:
     that:
       - connection_reg is not changed
-      - con['plugin'] == 'ansible.builtin.local'
-      - con['transport'] == 'local'
+      - con['plugin'] == 'ansible.builtin.' ~ con_transport
+      - con['transport'] == con_transport
       - con['platform'] == 'posix'
-      - con['local'] is true
-      # A setting the transport does not declare is null: local is
-      # pointed at no address, port or key
-      - con['addr'] is none
-      - con['port'] is none
-      - con['private_key_file'] is none
-      # local ignores every source of a remote user and runs as the
-      # user the CLI runs as
-      - con['user'] == lookup('pipe', 'id -un')
       # A task running as the connecting user has no escalation
       - con['become'] is none
       # Nothing outside Ansible was consulted; the record says so and
@@ -50,7 +56,40 @@
         con.keys() | list | sort == ['addr', 'become', 'evidence',
         'local', 'origins', 'platform', 'plugin', 'port',
         'private_key_file', 'transport', 'user']
+    fail_msg: 'o0_connection does not describe the transport: {{ con }}'
+
+- name: Assert the local transport declares no remote setting
+  when: con_transport == 'local'
+  vars:
+    con: "{{ connection_reg['ansible_facts']['o0_connection'] }}"
+  ansible.builtin.assert:
+    that:
+      - con['local'] is true
+      # A setting the transport does not declare is null: local is
+      # pointed at no address, port or key
+      - con['addr'] is none
+      - con['port'] is none
+      - con['private_key_file'] is none
+      # local ignores every source of a remote user and runs as the
+      # user the CLI runs as
+      - con['user'] == lookup('pipe', 'id -un')
     fail_msg: 'o0_connection does not describe the local transport: {{ con }}'
+
+- name: Assert the ssh transport resolved to what the inventory said
+  when: con_transport == 'ssh'
+  vars:
+    con: "{{ connection_reg['ansible_facts']['o0_connection'] }}"
+  ansible.builtin.assert:
+    that:
+      - con['addr'] == ansible_host
+      # A loopback address lands on the controller however it is reached
+      - con['local'] == (ansible_host in con_loopback)
+      - con['port'] == (ansible_port | default(none))
+      - con['user'] == (ansible_user | default(lookup('pipe', 'id -un')))
+      - >-
+        con['private_key_file']
+        == (ansible_ssh_private_key_file | default(none))
+    fail_msg: 'o0_connection does not describe the ssh transport: {{ con }}'
 
 - name: Assert the fact was set on the host as well as returned
   ansible.builtin.assert:
@@ -75,8 +114,12 @@
         con['become'] == {'plugin': 'ansible.builtin.sudo',
         'method': 'sudo', 'user': 'root'}
       # Escalation changes nothing about the transport itself
-      - con['plugin'] == 'ansible.builtin.local'
-      - con['user'] == lookup('pipe', 'id -un')
+      - >-
+        con['plugin']
+        == connection_reg['ansible_facts']['o0_connection']['plugin']
+      - >-
+        con['user']
+        == connection_reg['ansible_facts']['o0_connection']['user']
     fail_msg: 'o0_connection does not describe the escalation: {{ con }}'
 
 - name: Describe an escalation that named no user
