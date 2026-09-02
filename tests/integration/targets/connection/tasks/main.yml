@@ -179,8 +179,10 @@
     that:
       - con['addr'] == '192.0.2.10'
       - con['local'] is false
-      # No port was set anywhere, so ssh chooses and the fact says so
-      - con['port'] is none
+      # Only the address was named here; a port the inventory set for
+      # this host stays in force, and where none was set anywhere ssh
+      # chooses and the fact says so with a null
+      - con['port'] == (ansible_port | default(none))
     fail_msg: 'a setting left to ssh was asserted for it: {{ con }}'
 
 - name: Describe the connection in check mode
